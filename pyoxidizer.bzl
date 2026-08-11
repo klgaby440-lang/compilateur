@@ -4,10 +4,12 @@ def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
     
-    # CHARGEMENT EN RAM : Ne pas extraire les fichiers sur le disque dur !
-    policy.resources_location_fallback = "in-memory"
+    # COMPATIBILITÉ WINDOWS :
+    # "filesystem-relative:lib" permet de garder le code Python pur en RAM 
+    # tout en isolant les modules C natifs (_asyncio, _sqlite3, etc.) dans un dossier "lib"
+    policy.resources_location_fallback = "filesystem-relative:lib"
     
-    # Prise en charge des extensions natives et fichiers de données
+    # Prise en charge de toutes les extensions natives C/.pyd
     policy.extension_module_filter = "all"
     
     config = dist.make_python_interpreter_config()
