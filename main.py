@@ -125,7 +125,7 @@ class InterfaceActivation(ctk.CTkFrame):
         self.entry_code.pack(pady=10)
 
         # Affichage de l'ID matériel en dessous du champ de saisie
-        self.lbl_hwid = ctk.CTkLabel(self.card, text=f"🔑 Clé Matérielle (Hardware Key) :\n{self.hw_id}", font=("Arial", 12, "bold"), text_color="#2ECC71")
+        self.lbl_hwid = ctk.CTkLabel(self.card, text=f"🔑 Clé Matérielle (Hardware Key) :\n{self.cle_attendue}", font=("Arial", 12, "bold"), text_color="#2ECC71")
         self.lbl_hwid.pack(pady=10)
 
         self.lbl_msg = ctk.CTkLabel(self.card, text="", font=("Arial", 12))
