@@ -63,7 +63,7 @@ jobs:
           }
 
       # =============================================================
-      # BRANCHE B : Compilation Cython Ciblee (.pyd)
+      # BRANCHE B : Compilation Cython Ciblee (.pyd) ⚡
       # =============================================================
       - name: Preparation du Compilateur C et Cython
         if: matrix.techno == 'cython'
@@ -84,10 +84,11 @@ jobs:
                   $sizeKB = [math]::Round($file.Length / 1KB, 2)
                   Write-Host "Module compile natif : $($file.Name) - Taille : $sizeKB KB"
               }
+              
+              # Test d importation dynamique du premier module .pyd trouve
+              $moduleName = $pydFiles[0].BaseName.Split('.')[0]
+              $runTime = Measure-Command { python -c "import $moduleName; print('Importation native reussie de $moduleName !')" }
+              Write-Host "Temps d importation du module C (.pyd) : $($runTime.TotalMilliseconds) ms"
           } else {
-              Write-Host "Avertissement : Aucun fichier .pyd trouve à la racine."
+              Write-Host "Avertissement : Aucun fichier .pyd trouve a la racine suite a la compilation."
           }
-          
-          # Test d importation et de vitesse d execution
-          $runTime = Measure-Command { python -c "import securite; import base_donnees; print('Importation native reussie !')" }
-          Write-Host "Temps d importation des modules C (.pyd) : $($runTime.TotalMilliseconds) ms"
