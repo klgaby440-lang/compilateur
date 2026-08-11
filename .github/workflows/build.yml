@@ -45,17 +45,21 @@ jobs:
           $buildTime = Measure-Command { pyoxidizer build --release }
           Write-Host "Temps de build PyOxidizer : $($buildTime.TotalSeconds) secondes"
           
-          # Recherche du binaire genere dans le dossier build/
-          $exe = Get-ChildItem -Path build/ -Filter "*.exe" -Recurse | Select-Object -First 1
-          if ($exe) {
-              $sizeMB = [math]::Round($exe.Length / 1MB, 2)
-              Write-Host "Taille de l executable binaire : $sizeMB MB"
-              
-              # Test de vitesse de demarrage
-              $runTime = Measure-Command { Start-Process -FilePath $exe.FullName -ArgumentList "--benchmark" -Wait -NoNewWindow }
-              Write-Host "Temps de demarrage executable : $($runTime.TotalMilliseconds) ms"
+          # Verification de l existence du dossier build avant la recherche du binaire
+          if (Test-Path "build") {
+              $exe = Get-ChildItem -Path build -Filter "*.exe" -Recurse | Select-Object -First 1
+              if ($exe) {
+                  $sizeMB = [math]::Round($exe.Length / 1MB, 2)
+                  Write-Host "Taille de l executable binaire : $sizeMB MB"
+                  
+                  # Test de vitesse de demarrage
+                  $runTime = Measure-Command { Start-Process -FilePath $exe.FullName -ArgumentList "--benchmark" -Wait -NoNewWindow }
+                  Write-Host "Temps de demarrage executable : $($runTime.TotalMilliseconds) ms"
+              } else {
+                  Write-Host "Erreur : Fichier .exe introuvable dans le dossier build."
+              }
           } else {
-              Write-Host "Erreur : Executable introuvable."
+              Write-Host "Erreur : Le dossier build n a pas ete cree suite a un echec de PyOxidizer."
           }
 
       # =============================================================
@@ -75,9 +79,13 @@ jobs:
           
           # Verification des fichiers .pyd generes
           $pydFiles = Get-ChildItem -Filter "*.pyd"
-          foreach ($file in $pydFiles) {
-              $sizeKB = [math]::Round($file.Length / 1KB, 2)
-              Write-Host "Module compile natif : $($file.Name) - Taille : $sizeKB KB"
+          if ($pydFiles) {
+              foreach ($file in $pydFiles) {
+                  $sizeKB = [math]::Round($file.Length / 1KB, 2)
+                  Write-Host "Module compile natif : $($file.Name) - Taille : $sizeKB KB"
+              }
+          } else {
+              Write-Host "Avertissement : Aucun fichier .pyd trouve à la racine."
           }
           
           # Test d importation et de vitesse d execution
