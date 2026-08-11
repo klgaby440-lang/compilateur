@@ -33,11 +33,10 @@ jobs:
       # =============================================================
       # BRANCHE A : PyOxidizer (Rust Loader + CPython Embarqué) 🦀
       # =============================================================
-      - name: 🛠️ Installation de Rust & PyOxidizer
+      - name: 🛠️ Installation rapide de PyOxidizer
         if: matrix.techno == 'pyoxidizer'
         run: |
-          rustup update stable
-          cargo install pyoxidizer
+          pip install pyoxidizer
 
       - name: ⏱️ Construction avec PyOxidizer & Mesure du Temps
         if: matrix.techno == 'pyoxidizer'
@@ -46,13 +45,13 @@ jobs:
           $buildTime = Measure-Command { pyoxidizer build --release }
           Write-Host "⏱️ Temps de build PyOxidizer : $($buildTime.TotalSeconds) secondes"
           
-          # Recherche du binaire généré
+          # Recherche du binaire généré dans le dossier build/
           $exe = Get-ChildItem -Path build/ -Filter "*.exe" -Recurse | Select-Object -First 1
           if ($exe) {
               $sizeMB = [math]::Round($exe.Length / 1MB, 2)
               Write-Host "📏 Taille de l'exécutable binaire : $sizeMB MB"
               
-              # Test de vitesse de démarrage
+              # Test de vitesse de démarrage (nécessite que l'application puisse se fermer seule)
               $runTime = Measure-Command { Start-Process -FilePath $exe.FullName -ArgumentList "--benchmark" -Wait -NoNewWindow }
               Write-Host "⚡ Temps de démarrage exécutable : $($runTime.TotalMilliseconds) ms"
           } else {
@@ -62,7 +61,7 @@ jobs:
       # =============================================================
       # BRANCHE B : Compilation Cython Ciblée (.pyd) ⚡
       # =============================================================
-      - name: 🛠️ Preparation du Compilateur C & Cython
+      - name: 🛠️ Préparation du Compilateur C & Cython
         if: matrix.techno == 'cython'
         run: |
           pip install cython setuptools
@@ -71,7 +70,7 @@ jobs:
         if: matrix.techno == 'cython'
         shell: powershell
         run: |
-          $buildTime = Measure-Command { python setup_cython.py build_ext --inplace }
+          $buildTime = Measure-Command { python setup.py build_ext --inplace }
           Write-Host "⏱️ Temps de compilation Cython : $($buildTime.TotalSeconds) secondes"
           
           # Vérification des fichiers .pyd générés
