@@ -7,79 +7,79 @@ on:
 
 jobs:
   benchmark-compilation:
-    name: Test Parallèle (${{ matrix.techno }})
+    name: Test Parallele (${{ matrix.techno }})
     runs-on: windows-latest
     
     strategy:
-      fail-fast: false # Permet à un job de continuer même si l'autre échoue
+      fail-fast: false # Permet a un job de continuer meme si l'autre echoue
       matrix:
         techno: [pyoxidizer, cython]
 
     steps:
-      - name: 📥 Récupération du code source
+      - name: Recuperation du code source
         uses: actions/checkout@v4
 
-      - name: 🐍 Configuration de l'environnement Python
+      - name: Configuration de l environnement Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: 📦 Installation des dépendances du projet
+      - name: Installation des dependances du projet
         run: |
           python -m pip install --upgrade pip
           if (Test-Path "requirements.txt") { pip install -r requirements.txt }
 
       # =============================================================
-      # BRANCHE A : PyOxidizer (Rust Loader + CPython Embarqué) 🦀
+      # BRANCHE A : PyOxidizer (Rust Loader + CPython Embarque)
       # =============================================================
-      - name: 🛠️ Installation rapide de PyOxidizer
+      - name: Installation rapide de PyOxidizer
         if: matrix.techno == 'pyoxidizer'
         run: |
           pip install pyoxidizer
 
-      - name: ⏱️ Construction avec PyOxidizer & Mesure du Temps
+      - name: Construction avec PyOxidizer et Mesure du Temps
         if: matrix.techno == 'pyoxidizer'
         shell: powershell
         run: |
           $buildTime = Measure-Command { pyoxidizer build --release }
-          Write-Host "⏱️ Temps de build PyOxidizer : $($buildTime.TotalSeconds) secondes"
+          Write-Host "Temps de build PyOxidizer : $($buildTime.TotalSeconds) secondes"
           
-          # Recherche du binaire généré dans le dossier build/
+          # Recherche du binaire genere dans le dossier build/
           $exe = Get-ChildItem -Path build/ -Filter "*.exe" -Recurse | Select-Object -First 1
           if ($exe) {
               $sizeMB = [math]::Round($exe.Length / 1MB, 2)
-              Write-Host "📏 Taille de l'exécutable binaire : $sizeMB MB"
+              Write-Host "Taille de l executable binaire : $sizeMB MB"
               
-              # Test de vitesse de démarrage (nécessite que l'application puisse se fermer seule)
+              # Test de vitesse de demarrage
               $runTime = Measure-Command { Start-Process -FilePath $exe.FullName -ArgumentList "--benchmark" -Wait -NoNewWindow }
-              Write-Host "⚡ Temps de démarrage exécutable : $($runTime.TotalMilliseconds) ms"
+              Write-Host "Temps de demarrage executable : $($runTime.TotalMilliseconds) ms"
           } else {
-              Write-Host "❌ Erreur : Exécutable introuvable."
+              Write-Host "Erreur : Executable introuvable."
           }
 
       # =============================================================
-      # BRANCHE B : Compilation Cython Ciblée (.pyd) ⚡
+      # BRANCHE B : Compilation Cython Ciblee (.pyd)
       # =============================================================
-      - name: 🛠️ Préparation du Compilateur C & Cython
+      - name: Preparation du Compilateur C et Cython
         if: matrix.techno == 'cython'
         run: |
           pip install cython setuptools
 
-      - name: ⏱️ Compilation des modules C cibles (.pyd) & Mesure
+      - name: Compilation des modules C cibles (.pyd) et Mesure
         if: matrix.techno == 'cython'
         shell: powershell
         run: |
           $buildTime = Measure-Command { python setup.py build_ext --inplace }
-          Write-Host "⏱️ Temps de compilation Cython : $($buildTime.TotalSeconds) secondes"
+          Write-Host "Temps de compilation Cython : $($buildTime.TotalSeconds) secondes"
           
-          # Vérification des fichiers .pyd générés
+          # Verification des fichiers .pyd generes
           $pydFiles = Get-ChildItem -Filter "*.pyd"
           foreach ($file in $pydFiles) {
               $sizeKB = [math]::Round($file.Length / 1KB, 2)
-              Write-Host "📦 Module compilé natif : $($file.Name) - Taille : $sizeKB KB"
+              Write-Host "Module compile natif : $($file.Name) - Taille : $sizeKB KB"
           }
           
-          # Test d'importation et de vitesse d'exécution
-          $runTime = Measure-Command { python -c "import securite; import base_donnees; print('Importation native réussie !')" }
-          Write-Host "⚡ Temps d'importation des modules C (.pyd) : $($runTime.TotalMilliseconds) ms"
+          # Test d importation et de vitesse d execution
+          $runTime = Measure-Command { python -c "import securite; import base_donnees; print('Importation native reussie !')" }
+          Write-Host "Temps d importation des modules C (.pyd) : $($runTime.TotalMilliseconds) ms"
