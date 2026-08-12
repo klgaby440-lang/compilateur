@@ -33,50 +33,12 @@ jobs:
       # =============================================================
       # BRANCHE A : PyOxidizer (Rust Loader + CPython Embarque) 🦀
       # =============================================================
-      - name: Installation rapide de PyOxidizer
+      - name: Installation rapide de PyOxidizer et des dépendances
         if: matrix.techno == 'pyoxidizer'
         run: |
+          python -m pip install --upgrade pip
           pip install pyoxidizer
-
-      - name: Construction avec PyOxidizer et Mesure du Temps
-        if: matrix.techno == 'pyoxidizer'
-        shell: powershell
-        run: |
-          $buildTime = Measure-Command { pyoxidizer build --release }
-          Write-Host "Temps de build PyOxidizer : $($buildTime.TotalSeconds) secondes"
-          
-          # Verification de l existence du dossier build avant la recherche du binaire
-          if (Test-Path "build") {
-              $exe = Get-ChildItem -Path build -Filter "*.exe" -Recurse | Select-Object -First 1
-              if ($exe) {
-                  $sizeMB = [math]::Round($exe.Length / 1MB, 2)
-                  Write-Host "Taille de l executable binaire : $sizeMB MB"
-                  
-                  # Test de vitesse de demarrage
-                  $runTime = Measure-Command { Start-Process -FilePath $exe.FullName -ArgumentList "--benchmark" -Wait -NoNewWindow }
-                  Write-Host "Temps de demarrage executable : $($runTime.TotalMilliseconds) ms"
-              } else {
-                  Write-Host "Erreur : Fichier .exe introuvable dans le dossier build."
-              }
-          } else {
-              Write-Host "Erreur : Le dossier build n a pas ete cree suite a un echec de PyOxidizer."
-          }
-
-      - name: 📦 Televersement de l artefact PyOxidizer (.exe)
-        if: matrix.techno == 'pyoxidizer'
-        uses: actions/upload-artifact@v4
-        with:
-          name: SokoMaster-PyOxidizer-Executable
-          path: build/
-          if-no-files-found: error
-
-      # =============================================================
-      # BRANCHE B : Compilation Cython Ciblee (.pyd) ⚡
-      # =============================================================
-      - name: Preparation du Compilateur C et Cython
-        if: matrix.techno == 'cython'
-        run: |
-          pip install cython setuptools
+          if (Test-Path "requirements.txt") { pip install -r requirements.txt --target site-packages }
 
       - name: Construction avec PyOxidizer et Mesure du Temps
         if: matrix.techno == 'pyoxidizer'
@@ -100,6 +62,47 @@ jobs:
               } else {
                   Write-Host "Erreur : Fichier .exe introuvable."
               }
+          } else {
+              Write-Host "Erreur : Le dossier build n a pas ete cree suite a un echec de PyOxidizer."
+          }
+
+      - name: 📦 Televersement de l artefact PyOxidizer (.exe)
+        if: matrix.techno == 'pyoxidizer'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SokoMaster-PyOxidizer-Executable
+          path: build/
+          if-no-files-found: error
+
+      # =============================================================
+      # BRANCHE B : Compilation Cython Ciblee (.pyd) ⚡
+      # =============================================================
+      - name: Preparation du Compilateur C et Cython
+        if: matrix.techno == 'cython'
+        run: |
+          pip install cython setuptools
+
+      - name: Compilation des modules C cibles (.pyd) et Mesure
+        if: matrix.techno == 'cython'
+        shell: powershell
+        run: |
+          $buildTime = Measure-Command { python setup.py build_ext --inplace }
+          Write-Host "Temps de compilation Cython : $($buildTime.TotalSeconds) secondes"
+          
+          # Verification des fichiers .pyd generes
+          $pydFiles = Get-ChildItem -Filter "*.pyd"
+          if ($pydFiles) {
+              foreach ($file in $pydFiles) {
+                  $sizeKB = [math]::Round($file.Length / 1KB, 2)
+                  Write-Host "Module compile natif : $($file.Name) - Taille : $sizeKB KB"
+              }
+              
+              # Test d importation dynamique du premier module .pyd trouve
+              $moduleName = $pydFiles[0].BaseName.Split('.')[0]
+              $runTime = Measure-Command { python -c "import $moduleName; print('Importation native reussie de $moduleName !')" }
+              Write-Host "Temps d importation du module C (.pyd) : $($runTime.TotalMilliseconds) ms"
+          } else {
+              Write-Host "Avertissement : Aucun fichier .pyd trouve a la racine suite a la compilation."
           }
 
       - name: 📦 Televersement des artefacts Cython (.pyd)
