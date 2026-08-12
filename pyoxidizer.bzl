@@ -22,8 +22,10 @@ def make_exe():
         config=config,
     )
 
-    # CORRECTION : Inclusion du dossier site-packages pré-installé par pip
-    exe.add_python_resources(dist.read_package_root(path="site-packages"))
+    # CORRECTION EXACTE : Recherche et intégration des modules installés dans site-packages
+    exe.add_python_resources(
+        dist.find_python_resources(package_roots=["site-packages"])
+    )
 
     return exe
 
