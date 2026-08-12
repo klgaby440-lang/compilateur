@@ -8,15 +8,10 @@ import hashlib
 import csv
 from tkinter import filedialog
 from typing import Callable, Dict, Any
-from PIL import Image
 import datetime
 
 # Cryptage sécurisé
 from cryptography.fernet import Fernet
-
-# Graphiques statistiques
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("green")
@@ -772,7 +767,7 @@ class InterfaceOutils(ctk.CTkFrame):
         self.interfacecalculatrice.pack_forget()
 
 # ==========================================
-# STATISTIQUES ET GRAPHIQUES MATPLOTLIB
+# STATISTIQUES ET GRAPHIQUES (100% CTKCANVAS)
 # ==========================================
 class InterfaceStatistiques(ctk.CTkFrame):
     def __init__(self, master=None, width=150, height=400, bg_color="green", base_donnees=fichier_donnees):
@@ -843,7 +838,9 @@ class InterfaceStatistiques(ctk.CTkFrame):
             if conn: conn.close()
 
     def _generer_graphique_ventes(self, parent_frame):
-        for w in parent_frame.winfo_children(): w.destroy()
+        """Dessine un histogramme des 5 meilleurs produits vendus à l'aide d'un CTkCanvas natif."""
+        for w in parent_frame.winfo_children(): 
+            w.destroy()
 
         conn = sqlite3.connect(self.base_donnees)
         cursor = conn.cursor()
@@ -854,18 +851,46 @@ class InterfaceStatistiques(ctk.CTkFrame):
         produits = [securite.decrypter(d[0]) for d in donnees] if donnees else ["Aucune vente"]
         ventes = [d[1] for d in donnees] if donnees else [0]
 
-        fig, ax = plt.subplots(figsize=(6, 4), facecolor='#2b2b2b')
-        ax.set_facecolor('#2b2b2b')
-        ax.bar(produits, ventes, color='#2ECC71')
-        ax.set_title('Top 5 des Produits Vendus 📊', color='white', fontsize=14)
-        ax.tick_params(colors='white')
+        bg_theme = '#2b2b2b' if ctk.get_appearance_mode() == "Dark" else '#F2F2F2'
+        text_color = 'white' if ctk.get_appearance_mode() == "Dark" else 'black'
 
-        canvas = FigureCanvasTkAgg(fig, master=parent_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(expand=True, fill='both', padx=10, pady=10)
+        canvas = ctk.CTkCanvas(parent_frame, bg=bg_theme, highlightthickness=0, bd=0)
+        canvas.pack(expand=True, fill='both', padx=10, pady=10)
+
+        # Titre du graphique
+        canvas.create_text(250, 25, text="Top 5 des Produits Vendus 📊", fill=text_color, font=("Arial", 14, "bold"))
+
+        max_val = max(ventes) if max(ventes) > 0 else 1
+        chart_height = 180
+        start_y = 260
+        start_x = 50
+        bar_width = 50
+        spacing = 30
+
+        # Ligne de base (Axe X)
+        canvas.create_line(30, start_y, 450, start_y, fill=text_color, width=2)
+
+        for i, (prod, val) in enumerate(zip(produits, ventes)):
+            x0 = start_x + i * (bar_width + spacing)
+            x1 = x0 + bar_width
+            bar_h = (val / max_val) * chart_height
+            y0 = start_y - bar_h
+            y1 = start_y
+
+            # Dessin de la barre (Rectangle)
+            canvas.create_rectangle(x0, y0, x1, y1, fill='#2ECC71', outline="")
+            
+            # Affichage de la valeur vendue au-dessus de la barre
+            canvas.create_text(x0 + bar_width / 2, y0 - 12, text=str(val), fill=text_color, font=("Arial", 10, "bold"))
+            
+            # Libellé du produit sous la barre
+            nom_court = prod[:7] + ".." if len(prod) > 7 else prod
+            canvas.create_text(x0 + bar_width / 2, y1 + 15, text=nom_court, fill=text_color, font=("Arial", 9))
 
     def _generer_graphique_stocks(self, parent_frame):
-        for w in parent_frame.winfo_children(): w.destroy()
+        """Dessine un diagramme circulaire (Camembert) de l'état du stock à l'aide d'un CTkCanvas natif."""
+        for w in parent_frame.winfo_children(): 
+            w.destroy()
 
         conn = sqlite3.connect(self.base_donnees)
         cursor = conn.cursor()
@@ -877,21 +902,42 @@ class InterfaceStatistiques(ctk.CTkFrame):
         critique = sum(1 for q, s in donnees if 0 < q <= s)
         epuise = sum(1 for q, s in donnees if q == 0)
 
+        total = normal + critique + epuise
+        bg_theme = '#2b2b2b' if ctk.get_appearance_mode() == "Dark" else '#F2F2F2'
+        text_color = 'white' if ctk.get_appearance_mode() == "Dark" else 'black'
+
+        canvas = ctk.CTkCanvas(parent_frame, bg=bg_theme, highlightthickness=0, bd=0)
+        canvas.pack(expand=True, fill='both', padx=10, pady=10)
+
+        # Titre du graphique
+        canvas.create_text(250, 25, text="État Global du Stock 📉", fill=text_color, font=("Arial", 14, "bold"))
+
+        if total == 0:
+            canvas.create_text(250, 160, text="Aucune donnée disponible dans le stock", fill=text_color, font=("Arial", 12))
+            return
+
         labels = ['Stock Normal', 'Seuil Critique', 'Épuisé']
         sizes = [normal, critique, epuise]
         colors = ['#2ECC71', '#F1C40F', '#E74C3C']
 
-        fig, ax = plt.subplots(figsize=(6, 4), facecolor='#2b2b2b')
-        if sum(sizes) > 0:
-            ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', textprops={'color': "w"})
-        else:
-            ax.text(0.5, 0.5, 'Aucune donnée disponible', color='white', ha='center')
+        # Paramètres du Camembert
+        start_angle = 0
+        cx, cy, r = 140, 160, 85
 
-        ax.set_title('État Global du Stock 📉', color='white', fontsize=14)
+        for size, color in zip(sizes, colors):
+            if size == 0:
+                continue
+            extent = (size / total) * 360
+            canvas.create_arc(cx - r, cy - r, cx + r, cy + r, start=start_angle, extent=extent, fill=color, outline=bg_theme, width=2)
+            start_angle += extent
 
-        canvas = FigureCanvasTkAgg(fig, master=parent_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(expand=True, fill='both', padx=10, pady=10)
+        # Dessin de la Légende à droite
+        lx, ly = 270, 110
+        for label, size, color in zip(labels, sizes, colors):
+            pct = (size / total) * 100
+            canvas.create_rectangle(lx, ly, lx + 16, ly + 16, fill=color, outline="")
+            canvas.create_text(lx + 26, ly + 8, text=f"{label}: {pct:.1f}% ({size})", fill=text_color, anchor="w", font=("Arial", 10, "bold"))
+            ly += 35
 
 # ==========================================
 # PARAMÈTRES & FONCTIONS DE SAUVEGARDE
