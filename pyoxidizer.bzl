@@ -5,11 +5,9 @@ def make_exe():
     dist = default_python_distribution()
     policy = dist.make_python_packaging_policy()
 
-    # Tente d'embarquer le maximum de ressources directement en mémoire RAM
-    policy.resources_location = "in-memory"
-
     # COMPATIBILITÉ WINDOWS :
-    # Isole les modules C natifs (_asyncio, _sqlite3, etc.) dans le dossier "lib"
+    # "filesystem-relative:lib" permet de garder le code Python pur en RAM
+    # tout en isolant les modules C natifs (_asyncio, _sqlite3, etc.) dans un dossier "lib"
     policy.resources_location_fallback = "filesystem-relative:lib"
 
     # Prise en charge de toutes les extensions natives C/.pyd
@@ -24,10 +22,8 @@ def make_exe():
         config=config,
     )
 
-    # --------------------------------------------------------------------------
-    # AJOUT ESSENTIEL : Empaquetage automatique des dépendances requirements.txt
-    # --------------------------------------------------------------------------
-    exe.add_python_resources(dist.pip_install(["-r", "requirements.txt"]))
+    # CORRECTION : pip_install est une fonction globale en Starlark (sans "dist.")
+    exe.add_python_resources(pip_install(["-r", "requirements.txt"]))
 
     return exe
 
