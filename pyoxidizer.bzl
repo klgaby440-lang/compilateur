@@ -6,11 +6,8 @@ def make_exe():
     policy = dist.make_python_packaging_policy()
 
     # COMPATIBILITÉ WINDOWS :
-    # "filesystem-relative:lib" permet de garder le code Python pur en RAM
-    # tout en isolant les modules C natifs dans le dossier "lib"
+    # "filesystem-relative:lib" isole les modules natifs et ressources dans le dossier "lib"
     policy.resources_location_fallback = "filesystem-relative:lib"
-
-    # Prise en charge de toutes les extensions natives C/.pyd
     policy.extension_module_filter = "all"
 
     config = dist.make_python_interpreter_config()
@@ -21,12 +18,6 @@ def make_exe():
         packaging_policy=policy,
         config=config,
     )
-
-    # CORRECTION EXACTE : Recherche et intégration des modules installés dans site-packages
-    exe.add_python_resources(
-        dist.find_python_resources(package_roots=["site-packages"])
-    )
-
     return exe
 
 
@@ -37,6 +28,11 @@ def make_embedded_resources(exe):
 def make_install(exe):
     files = FileManifest()
     files.add_python_resource(".", exe)
+
+    # Copie propre du dossier site-packages dans le sous-dossier lib/ du binaire
+    if path_exists("site-packages"):
+        files.add_path(path="site-packages", destination="lib")
+
     return files
 
 
