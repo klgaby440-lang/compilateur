@@ -11,7 +11,7 @@ jobs:
     runs-on: windows-latest
     
     strategy:
-      fail-fast: false # Permet a un job de continuer meme si l'autre echoue
+      fail-fast: false # Permet a un job de continuer meme si l autre echoue
       matrix:
         techno: [pyoxidizer, cython]
 
@@ -31,7 +31,7 @@ jobs:
           if (Test-Path "requirements.txt") { pip install -r requirements.txt }
 
       # =============================================================
-      # BRANCHE A : PyOxidizer (Rust Loader + CPython Embarque)
+      # BRANCHE A : PyOxidizer (Rust Loader + CPython Embarque) 🦀
       # =============================================================
       - name: Installation rapide de PyOxidizer
         if: matrix.techno == 'pyoxidizer'
@@ -61,6 +61,14 @@ jobs:
           } else {
               Write-Host "Erreur : Le dossier build n a pas ete cree suite a un echec de PyOxidizer."
           }
+
+      - name: 📦 Televersement de l artefact PyOxidizer (.exe)
+        if: matrix.techno == 'pyoxidizer'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SokoMaster-PyOxidizer-Executable
+          path: build/
+          if-no-files-found: error
 
       # =============================================================
       # BRANCHE B : Compilation Cython Ciblee (.pyd) ⚡
@@ -92,3 +100,11 @@ jobs:
           } else {
               Write-Host "Avertissement : Aucun fichier .pyd trouve a la racine suite a la compilation."
           }
+
+      - name: 📦 Televersement des artefacts Cython (.pyd)
+        if: matrix.techno == 'cython'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SokoMaster-Cython-Modules-PYD
+          path: "*.pyd"
+          if-no-files-found: error
