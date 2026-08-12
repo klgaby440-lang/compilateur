@@ -7,7 +7,7 @@ def make_exe():
 
     # COMPATIBILITÉ WINDOWS :
     # "filesystem-relative:lib" permet de garder le code Python pur en RAM
-    # tout en isolant les modules C natifs (_asyncio, _sqlite3, etc.) dans un dossier "lib"
+    # tout en isolant les modules C natifs dans le dossier "lib"
     policy.resources_location_fallback = "filesystem-relative:lib"
 
     # Prise en charge de toutes les extensions natives C/.pyd
@@ -22,8 +22,8 @@ def make_exe():
         config=config,
     )
 
-    # CORRECTION : pip_install est une fonction globale en Starlark (sans "dist.")
-    exe.add_python_resources(pip_install(["-r", "requirements.txt"]))
+    # CORRECTION : Inclusion du dossier site-packages pré-installé par pip
+    exe.add_python_resources(dist.read_package_root(path="site-packages"))
 
     return exe
 
