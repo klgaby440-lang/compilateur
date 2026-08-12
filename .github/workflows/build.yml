@@ -28,8 +28,8 @@ jobs:
 
     - name: 🔨 Compiler avec Nuitka
       run: |
-        python -m nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --company-name="CRYPT" --product-name="SokoMaster" --output-dir="dist_nuitka" main.py
-
+        python -m nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --company-name="CRYPT" --product-name="SokoMaster" --file-version=1.0.0.0 --product-version=1.0.0.0 --output-dir="dist_nuitka" main.py
+        
     - name: 🚀 Uploader l'exécutable Nuitka
       uses: actions/upload-artifact@v4
       with:
