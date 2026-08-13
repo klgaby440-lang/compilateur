@@ -2154,7 +2154,9 @@ if __name__ == "__main__":
         else:
             interface_act = InterfaceActivation(root, on_activation_success=lancer_application_principale, base_donnees=fichier_donnees)
             interface_act.pack(expand=True, fill="both")
-
+            
+    initialisation_lourde()
+    
     # On lance l'initialisation après 100ms pour laisser l'interface s'afficher proprement
     root.after(1000, initialisation_lourde)
     root.mainloop()
