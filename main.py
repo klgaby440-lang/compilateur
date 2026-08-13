@@ -1,5 +1,19 @@
-import customtkinter as ctk
+import os
+import csv
+import math
 import time
+import uuid
+import httpx
+import sqlite3
+import hashlib
+import datetime
+import threading
+from typing import Callable, Dict, Any
+import tkinter.ttk as ttk
+from tkinter import filedialog, messagebox
+
+import customtkinter as ctk
+from cryptography.fernet import Fernet
 
 # ==========================================
 # 🚀 1. INITIALISATION DU SPLASH SCREEN ULTRA-RAPIDE (< 3s)
@@ -46,7 +60,6 @@ progress_bar.pack(pady=(0, 12))
 lbl_status = ctk.CTkLabel(splash_frame, text="Initialisation du système... ⚡", font=("Arial", 12, "italic"), text_color="#BDC3C7")
 lbl_status.pack()
 
-# Affichage visuel immédiat avant le chargement des lourdes dépendances
 root.update()
 
 def mettre_a_jour_splash(texte: str, progression: float):
@@ -54,30 +67,97 @@ def mettre_a_jour_splash(texte: str, progression: float):
     lbl_status.configure(text=texte)
     progress_bar.set(progression)
     root.update()
-    
-import sqlite3
-import os
-import threading
-import httpx
-import uuid
-import hashlib
-import csv
-from tkinter import filedialog
-from typing import Callable, Dict, Any
-import datetime
-import tkinter.ttk as ttk
-import threading
-import time
-import math
 
-# Cryptage sécurisé
-from cryptography.fernet import Fernet
 mettre_a_jour_splash("Chargement du moteur SQLite et des utilitaires... 🗄️", 0.25)
 
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("green")
-
 fichier_donnees = "bd_prd4_sqlt3_v1.0.0.crypt"
+
+# ==========================================
+# INITIALISATION ET CRÉATION DES TABLES SQLITE
+# ==========================================
+def initialiser_bdd(base_donnees: str = fichier_donnees):
+    """Garantit l'existence de la structure de base de données au démarrage."""
+    try:
+        conn = sqlite3.connect(base_donnees)
+        cursor = conn.cursor()
+
+        # Table activation
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS activation (
+                id INTEGER PRIMARY KEY,
+                code TEXT,
+                is_activated INTEGER DEFAULT 0
+            )
+        """)
+        cursor.execute("INSERT OR IGNORE INTO activation (id, code, is_activated) VALUES (1, '', 0)")
+
+        # Table stock
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS stock (
+                index_p INTEGER PRIMARY KEY,
+                nom TEXT,
+                quantite INTEGER,
+                p_a_u REAL,
+                p_v_u REAL,
+                seuil_critique INTEGER
+            )
+        """)
+
+        # Table ventes
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ventes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT,
+                quantite INTEGER,
+                p_v_t REAL,
+                heure TEXT,
+                date TEXT,
+                index_p INTEGER
+            )
+        """)
+
+        # Table achats
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS achats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT,
+                quantite INTEGER,
+                p_a_t REAL,
+                heure TEXT,
+                date TEXT,
+                index_p INTEGER
+            )
+        """)
+
+        # Table dettes
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dettes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT,
+                somme REAL,
+                telephone TEXT,
+                date TEXT
+            )
+        """)
+
+        # Table parametres
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS parametres (
+                nom_boutique TEXT,
+                numero_phone TEXT,
+                adresse_physique TEXT,
+                devise_main TEXT,
+                code_pin INTEGER,
+                verouillage INTEGER,
+                theme INTEGER,
+                index_p INTEGER PRIMARY KEY
+            )
+        """)
+
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[Erreur Initialisation BDD] : {e}")
 
 # ==========================================
 # GÉNÉRATION HARDWARE-BOUND KEY (LICENCE UNIQUE)
@@ -93,7 +173,7 @@ def generer_cle_activation_valide(hw_id: str) -> str:
     """Génère la clé d'activation correspondant à l'empreinte matérielle."""
     raw = f"SECRET-CRYPT-KEY-2026-{hw_id}"
     h = hashlib.sha256(raw.encode('utf-8')).hexdigest().upper()
-    return f"SOKO-{h[:4]}-{h[4:8]}-{h[8:12]}"+"-CRYPT-$#A9-{[32"
+    return f"SOKO-{h[:4]}-{h[4:8]}-{h[8:12]}" + "-CRYPT-$#A9-{[32"
 
 # ==========================================
 # GESTION DU CRYPTAGE / DÉCRYPTAGE
@@ -125,7 +205,7 @@ class GestionnaireSecurite:
         try:
             return self.fernet.decrypt(token.encode('utf-8')).decode('utf-8')
         except Exception:
-            return token  # Retourne le texte brut si ce n'était pas crypté
+            return token
 
 securite = GestionnaireSecurite()
 
@@ -144,7 +224,6 @@ class LlinkApiClient:
             try:
                 response = self.client.post(f"{self.base_url}{endpoint}", json=payload)
                 response.raise_for_status()
-                # Adaptation au format de réponse brut (Text/Streaming) du serveur FastAPI
                 data_text = response.text
                 on_success(data_text)
             except httpx.TimeoutException:
@@ -163,17 +242,15 @@ class LlinkApiClient:
 class InterfaceActivation(ctk.CTkFrame):
     """Interface d'activation logicielle ultra-sécurisée et optimisée pour SokoMaster."""
     def __init__(self, master, on_activation_success: Callable, base_donnees: str = fichier_donnees):
-        super().__init__(master, fg_color="#121212") # Fond global sombre et immersif
+        super().__init__(master, fg_color="#121212")
         self.on_activation_success = on_activation_success
         self.base_donnees = base_donnees
         self.hw_id = obtenir_hardware_id()
         self.cle_attendue = generer_cle_activation_valide(self.hw_id)
 
-        # Centrage parfait de la carte sur l'écran
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        # --- CARTE CENTRALE PRINCIPALE ---
         self.card = ctk.CTkFrame(
             self, 
             corner_radius=20, 
@@ -183,7 +260,6 @@ class InterfaceActivation(ctk.CTkFrame):
         )
         self.card.grid(row=0, column=0, padx=20, pady=20, ipadx=10, ipady=10)
 
-        # En-tête avec Icône / Titre stylisé
         self.lbl_titre = ctk.CTkLabel(
             self.card, 
             text="🔐 Activation de SokoMaster", 
@@ -200,13 +276,12 @@ class InterfaceActivation(ctk.CTkFrame):
         )
         self.lbl_soustitre.pack(pady=(0, 25), padx=40)
 
-        # Champ de saisie du code de licence
         self.entry_code = ctk.CTkEntry(
             self.card, 
-            placeholder_text="SOKO-XXXX-XXXX-XXXX", 
+            placeholder_text="SOKO-XXXX-XXXX-XXXX...", 
             width=360, 
             height=45,
-            font=("Arial", 14, "bold"), 
+            font=("Arial", 12, "bold"), 
             justify="center",
             fg_color="#242424",
             border_color="#3A3A3A",
@@ -214,7 +289,6 @@ class InterfaceActivation(ctk.CTkFrame):
         )
         self.entry_code.pack(pady=10)
 
-        # --- SECTION IDENTIFIANT MATÉRIEL (HARDWARE ID) & BOUTON DE COPIE ---
         self.frame_hwid = ctk.CTkFrame(self.card, fg_color="#222222", corner_radius=12, border_width=1, border_color="#333333")
         self.frame_hwid.pack(fill="x", padx=40, pady=15)
 
@@ -226,15 +300,15 @@ class InterfaceActivation(ctk.CTkFrame):
         )
         self.lbl_hwid_titre.pack(anchor="w", padx=15, pady=(10, 2))
 
+        # CORRECTION FAILLE : On affiche l'ID matériel (hw_id) et NON la clé attendue !
         self.lbl_hwid_valeur = ctk.CTkLabel(
             self.frame_hwid, 
-            text=self.cle_attendue, 
+            text=self.hw_id, 
             font=("Consolas", 12, "bold"), 
             text_color="#3498DB"
         )
         self.lbl_hwid_valeur.pack(anchor="w", padx=15, pady=(0, 5))
 
-        # Bouton ergonomique pour copier l'ID matériel dans le presse-papiers
         self.btn_copier = ctk.CTkButton(
             self.frame_hwid, 
             text="📋 Copier mon ID Matériel", 
@@ -247,11 +321,9 @@ class InterfaceActivation(ctk.CTkFrame):
         )
         self.btn_copier.pack(anchor="e", padx=15, pady=(5, 10))
 
-        # Zone de message / feedback utilisateur
         self.lbl_msg = ctk.CTkLabel(self.card, text="", font=("Arial", 12, "bold"))
         self.lbl_msg.pack(pady=8)
 
-        # Bouton principal d'activation
         self.btn_valider = ctk.CTkButton(
             self.card, 
             text="Activer le logiciel 🚀", 
@@ -265,9 +337,9 @@ class InterfaceActivation(ctk.CTkFrame):
         self.btn_valider.pack(pady=(15, 35), padx=40)
 
     def _copier_hwid(self):
-        """Copie la clé matérielle / attendue dans le presse-papiers du système."""
+        """Copie la clé matérielle HW-ID dans le presse-papiers."""
         self.clipboard_clear()
-        self.clipboard_append(self.cle_attendue)
+        self.clipboard_append(self.hw_id)
         self.lbl_msg.configure(text="✅ ID Matériel copié dans le presse-papiers !", text_color="#3498DB")
 
     def _verifier_code(self):
@@ -286,7 +358,6 @@ class InterfaceActivation(ctk.CTkFrame):
                 conn.close()
 
                 self.lbl_msg.configure(text="🎉 Activation matérielle réussie avec succès !", text_color="#2ECC71")
-                # Transition fluide vers l'application principale après 1.2 secondes
                 self.after(1200, self.on_activation_success)
             except sqlite3.Error as e:
                 self.lbl_msg.configure(text=f"❌ Erreur de base de données : {e}", text_color="#E74C3C")
@@ -296,19 +367,13 @@ class InterfaceActivation(ctk.CTkFrame):
 # ==========================================
 # FENÊTRE D'ÉMISSION ET D'IMPRESSION DE REÇU
 # ==========================================
-import datetime
-import sqlite3
-from typing import Dict
-import customtkinter as ctk
-from tkinter import filedialog, messagebox
-
 class InterfaceRecu(ctk.CTkToplevel):
     """Générateur et imprimeur de reçus clients pour SokoMaster v1.9.x."""
     
     def __init__(self, master=None, base_donnees="bd_prd4_sqlt3_v1.0.0.crypt"):
         super().__init__(master)
         self.title("🧾 Générateur de Reçu - SokoMaster")
-        self.geometry("420x650") # Légèrement agrandi pour le rendu de monnaie
+        self.geometry("420x650")
         self.resizable(False, False)
         self.base_donnees = base_donnees
         self.grab_set()
@@ -322,11 +387,9 @@ class InterfaceRecu(ctk.CTkToplevel):
         adresse = self.params.get('adresse_physique', 'N/A')
         self.devise = self.params.get('devise_main', 'FC')
 
-        # En-tête
         ctk.CTkLabel(self, text=f"🧾 {nom_boutique}", font=("Arial", 20, "bold"), text_color="#2ECC71").pack(pady=(15, 2))
         ctk.CTkLabel(self, text=f"Tel: {telephone} | {adresse}", font=("Arial", 11), text_color="gray").pack(pady=(0, 10))
 
-        # Zone de saisie d'articles (Innovation: ComboBox)
         frame_add = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=10)
         frame_add.pack(fill="x", padx=15, pady=5)
 
@@ -342,11 +405,9 @@ class InterfaceRecu(ctk.CTkToplevel):
         btn_ajouter = ctk.CTkButton(frame_add, text="➕", width=40, fg_color="#2ECC71", hover_color="#27AE60", command=self._ajouter_ligne)
         btn_ajouter.grid(row=0, column=3, padx=5, pady=8)
 
-        # Zone d'aperçu textuel du reçu
         self.txt_recu = ctk.CTkTextbox(self, font=("Courier", 12), width=430, height=280, fg_color="#121212", text_color="#2ECC71")
         self.txt_recu.pack(padx=15, pady=10, fill="both", expand=True)
 
-        # Résumé Total & Rendu Monnaie (Innovation 1.9.x)
         frame_totaux = ctk.CTkFrame(self, fg_color="transparent")
         frame_totaux.pack(fill="x", padx=15, pady=5)
         
@@ -360,7 +421,6 @@ class InterfaceRecu(ctk.CTkToplevel):
         self.lbl_rendu = ctk.CTkLabel(self, text=f"À rendre : 0 {self.devise}", font=("Arial", 14, "bold"), text_color="#3498DB")
         self.lbl_rendu.pack(pady=2)
 
-        # Barre de boutons d'actions
         frame_actions = ctk.CTkFrame(self, fg_color="transparent")
         frame_actions.pack(fill="x", padx=15, pady=(5, 15))
 
@@ -373,7 +433,6 @@ class InterfaceRecu(ctk.CTkToplevel):
         self._actualiser_apercu()
 
     def _charger_produits_stock(self):
-        """Récupère les noms des produits pour l'auto-complétion (Innovation v1.9.x)."""
         produits = []
         try:
             conn = sqlite3.connect(self.base_donnees)
@@ -388,7 +447,6 @@ class InterfaceRecu(ctk.CTkToplevel):
         return produits if produits else ["Aucun produit"]
 
     def _charger_parametres(self) -> Dict[str, str]:
-        """Correction de la requête SQL pour s'adapter à la table en colonnes."""
         params = {}
         try:
             conn = sqlite3.connect(self.base_donnees)
@@ -436,7 +494,6 @@ class InterfaceRecu(ctk.CTkToplevel):
         self._calculer_rendu()
 
     def _calculer_rendu(self, event=None):
-        """Calcule dynamiquement la monnaie à rendre au client."""
         try:
             grand_total = sum(item['total'] for item in self.articles_recu)
             montant_remis_str = self.entry_montant_recu.get().strip()
@@ -453,7 +510,7 @@ class InterfaceRecu(ctk.CTkToplevel):
             else:
                 self.lbl_rendu.configure(text=f"À rendre : {rendu:,.0f} {self.devise}", text_color="#3498DB")
         except ValueError:
-            self.lbl_rendu.configure(text=f"Entrée invalide", text_color="#F1C40F")
+            self.lbl_rendu.configure(text="Entrée invalide", text_color="#F1C40F")
 
     def _actualiser_apercu(self):
         boutique = self.params.get('nom_boutique', 'SokoMaster Store')
@@ -480,7 +537,6 @@ class InterfaceRecu(ctk.CTkToplevel):
         texte += f"TOTAL A PAYER : {grand_total:,.0f} {self.devise}\n"
         texte += f"{'='*38}\n"
         
-        # Ajout du rendu dans l'aperçu si un montant a été saisi
         try:
             remis = float(self.entry_montant_recu.get().strip())
             texte += f"Montant remis : {remis:,.0f} {self.devise}\n"
@@ -533,7 +589,7 @@ class InterfaceRecu(ctk.CTkToplevel):
                 messagebox.showerror("Erreur Module", "Le module FPDF n'est pas installé.\nExécutez dans votre terminal :\npip install fpdf")
             except Exception as e:
                 messagebox.showerror("Erreur", f"Erreur lors de la génération du PDF : {e}")
-                
+
 # ==========================================
 # INTERFACES DE GESTION (ACHAT / VENTE)
 # ==========================================
@@ -630,24 +686,17 @@ class InterfaceVenteAchatRemove(ctk.CTkToplevel):
             if conn: conn.close()
 
 
-import tkinter.ttk as ttk
-import threading
-import time
-import math
-
 class InterfaceStock(ctk.CTkFrame):
     def __init__(self, master, width, height, bg_color, border_width, border_color, base_donnees=fichier_donnees):
         super().__init__(master, width=width, height=height, bg_color=bg_color)
         self.base_donnees = base_donnees
         
-        # --- VARIABLES DE PAGINATION ET RECHERCHE ---
-        self.produits_filtres = [] # Stocke les données décryptées
+        self.produits_filtres = []
         self.page_actuelle = 1
         self.elements_par_page = 30
         self.total_pages = 1
         self.en_chargement = False
 
-        # --- STYLE DU TREEVIEW (Adaptation au Dark Theme CTk) ---
         self.style = ttk.Style()
         self.style.theme_use("default")
         self.style.configure("Treeview",
@@ -668,19 +717,16 @@ class InterfaceStock(ctk.CTkFrame):
                              padding=5)
         self.style.map("Treeview.Heading", background=[('active', '#1E8449')])
 
-        # --- BARRE DE RECHERCHE ---
         self.entry = ctk.CTkEntry(self, corner_radius=8, placeholder_text="🔍 Rechercher un produit...", height=40)
         self.entry.pack(fill="x", padx=15, pady=(15, 5))
         self.entry.bind("<KeyRelease>", self._declencher_recherche_async)
 
-        # --- CONTENEUR DU TREEVIEW ---
         self.tree_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.tree_frame.pack(expand=True, fill="both", padx=15, pady=5)
 
         colonnes = ("ID", "Nom", "Quantité", "Seuil", "P.A (Unit)", "P.V (Unit)")
         self.tree = ttk.Treeview(self.tree_frame, columns=colonnes, show="headings", style="Treeview")
         
-        # Configuration des colonnes
         self.tree.heading("ID", text="ID")
         self.tree.column("ID", width=50, anchor="center")
         self.tree.heading("Nom", text="Nom du Produit")
@@ -702,7 +748,6 @@ class InterfaceStock(ctk.CTkFrame):
         
         self.tree.bind("<<TreeviewSelect>>", self._on_item_selected)
 
-        # --- BARRE DE PAGINATION ---
         self.pagination_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.pagination_frame.pack(fill="x", padx=15, pady=5)
         
@@ -715,7 +760,6 @@ class InterfaceStock(ctk.CTkFrame):
         self.btn_suiv = ctk.CTkButton(self.pagination_frame, text="Suivant ▶", width=100, command=self._page_suivante)
         self.btn_suiv.pack(side="right", padx=5)
 
-        # --- BARRE D'ACTIONS DYNAMIQUES ---
         self.action_frame = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=10)
         self.action_frame.pack(fill="x", padx=15, pady=(5, 15))
         
@@ -731,13 +775,11 @@ class InterfaceStock(ctk.CTkFrame):
         self.btn_achat = ctk.CTkButton(self.action_frame, text="+ Achat", width=100, fg_color="green", state="disabled", command=self._noter_achat)
         self.btn_achat.pack(side="right", padx=5, pady=10)
 
-        self.produit_selectionne = None # Va contenir l'index_p
+        self.produit_selectionne = None
 
-        # Premier chargement
         self._declencher_recherche_async()
 
     def _declencher_recherche_async(self, event=None):
-        """Lance la récupération des données dans un thread séparé (Asynchrone)."""
         if self.en_chargement:
             return
         self.en_chargement = True
@@ -746,7 +788,6 @@ class InterfaceStock(ctk.CTkFrame):
         threading.Thread(target=self._recuperer_donnees_thread, args=(terme,), daemon=True).start()
 
     def _recuperer_donnees_thread(self, terme_recherche):
-        """Fonction exécutée en arrière-plan pour ne pas figer l'UX pendant le décryptage."""
         conn = None
         resultats_temporaires = []
         try:
@@ -759,8 +800,6 @@ class InterfaceStock(ctk.CTkFrame):
                 nom_decrypte = securite.decrypter(tupl[1])
                 if terme_recherche and terme_recherche not in nom_decrypte.lower():
                     continue
-                
-                # On structure les données pour le Treeview
                 resultats_temporaires.append((tupl[0], nom_decrypte, tupl[2], tupl[3], tupl[4], tupl[5]))
                 
         except sqlite3.Error as e:
@@ -768,14 +807,12 @@ class InterfaceStock(ctk.CTkFrame):
         finally:
             if conn: conn.close()
 
-        # On met à jour l'interface depuis le thread principal via une fonction lambda
         self.after(0, lambda: self._mettre_a_jour_interface(resultats_temporaires))
 
     def _mettre_a_jour_interface(self, donnees):
         self.produits_filtres = donnees
         self.total_pages = max(1, math.ceil(len(self.produits_filtres) / self.elements_par_page))
         
-        # Si on recherche et que la page actuelle dépasse le nb de pages trouvées, on réinitialise
         if self.page_actuelle > self.total_pages:
             self.page_actuelle = 1
             
@@ -783,7 +820,6 @@ class InterfaceStock(ctk.CTkFrame):
         self._afficher_page_actuelle()
 
     def _afficher_page_actuelle(self):
-        # On vide le Treeview
         for item in self.tree.get_children():
             self.tree.delete(item)
             
@@ -792,7 +828,6 @@ class InterfaceStock(ctk.CTkFrame):
         produits_page = self.produits_filtres[debut:fin]
 
         for prod in produits_page:
-            # prod = (index_p, nom, qte, seuil, pa, pv)
             tags = ()
             if prod[2] == 0:
                 tags = ('epuise',)
@@ -801,17 +836,14 @@ class InterfaceStock(ctk.CTkFrame):
                 
             self.tree.insert("", "end", values=prod, tags=tags)
 
-        # Couleurs d'alerte dans le Treeview
-        self.tree.tag_configure('epuise', background='#7B241C') # Rouge sombre
-        self.tree.tag_configure('critique', background='#9A7D0A') # Jaune sombre
+        self.tree.tag_configure('epuise', background='#7B241C')
+        self.tree.tag_configure('critique', background='#9A7D0A')
 
         self.lbl_page.configure(text=f"Page {self.page_actuelle} / {self.total_pages}")
         
-        # Gestion de l'état des boutons de pagination
         self.btn_prec.configure(state="normal" if self.page_actuelle > 1 else "disabled")
         self.btn_suiv.configure(state="normal" if self.page_actuelle < self.total_pages else "disabled")
         
-        # On désélectionne et verrouille les actions
         self._desactiver_actions()
 
     def _page_precedente(self):
@@ -829,7 +861,7 @@ class InterfaceStock(ctk.CTkFrame):
         if selection:
             item = self.tree.item(selection[0])
             valeurs = item['values']
-            self.produit_selectionne = valeurs[0] # L'ID (index_p) est dans la première colonne
+            self.produit_selectionne = valeurs[0]
             nom_produit = valeurs[1]
             
             self.lbl_produit_select.configure(text=f"Sélection : {nom_produit}", text_color="#2ECC71", font=("Arial", 14, "bold"))
@@ -854,7 +886,6 @@ class InterfaceStock(ctk.CTkFrame):
             cursor.execute("DELETE FROM stock WHERE index_p = ?", (self.produit_selectionne,))
             conn.commit()
             conn.close()
-            # On relance une recherche silencieuse pour actualiser
             self._declencher_recherche_async()
         except sqlite3.Error as e:
             print(f"❌ Erreur suppression : {e}")
@@ -867,7 +898,6 @@ class InterfaceStock(ctk.CTkFrame):
         if self.produit_selectionne:
             InterfaceVenteAchatRemove(self, removed=True, index=self.produit_selectionne, mode="vente", base_donnees=self.base_donnees)
             
-    # Cette méthode permet aux fenêtres filles de déclencher la mise à jour (comme dans ton code original)
     def _recuperation_et_remplissage(self, recherche=""):
         self._declencher_recherche_async()
 
@@ -884,7 +914,6 @@ class InterfaceNewProduct(ctk.CTkFrame):
         )
         self.base_donnees = base_donnees
 
-        # En-tête de la section
         self.lbl_titre = ctk.CTkLabel(
             self, 
             text="📦 Enregistrer un Nouveau Produit", 
@@ -896,7 +925,6 @@ class InterfaceNewProduct(ctk.CTkFrame):
         li_label = ["NOM PRODUIT", "QUANTITÉ INITIALE", "SEUIL CRITIQUE", "P.A UNITAIRE", "P.V UNITAIRE"]
         self.entries = []
 
-        # Construction dynamique des champs avec un décalage de ligne de +1 pour laisser place au titre
         for t, (label, placeholder) in enumerate(zip(li_label, li_entry)):
             row_idx = t + 1
             
@@ -922,11 +950,9 @@ class InterfaceNewProduct(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=2)
 
-        # Label de message (Succès / Erreur)
         self.lbl_msg = ctk.CTkLabel(self, text="", font=("Arial", 11, "bold"))
         self.lbl_msg.grid(row=6, column=0, columnspan=2, pady=5)
 
-        # Bouton d'action principal stylisé
         self.bouton = ctk.CTkButton(
             self, 
             text="Ajouter le produit (Crypté) 🔒", 
@@ -990,7 +1016,6 @@ class InterfaceNewProduct(ctk.CTkFrame):
 
 mettre_a_jour_splash("Chargement des données... 🗄️", 0.5)
 
-
 class InterfaceIventaire(ctk.CTkFrame):
     def __init__(self, master=None, width=500, height=400, bg_color="green", border_width=2, border_color="grey", base_donnees=fichier_donnees):
         super().__init__(master, width=width, height=height, bg_color=bg_color)
@@ -1019,7 +1044,6 @@ class InterfaceIventaire(ctk.CTkFrame):
         self.interfacestock.pack_forget()
 
     def _ouvrir_recu(self):
-        """Ouvre l'interface de génération et d'impression de reçus."""
         InterfaceRecu(self, base_donnees=self.base_donnees)
 
 # ==========================================
@@ -1029,12 +1053,10 @@ class InterfaceCalculatrice(ctk.CTkFrame):
     def __init__(self, master, width=300, height=400, bg_color="transparent", border_width=0, border_color="transparent"):
         super().__init__(master, width=width, height=height, fg_color=bg_color, border_width=border_width, border_color=border_color)
         
-        # Configuration de la grille principale de la frame (5 lignes pour les boutons + 1 pour l'écran)
         self.grid_columnconfigure((0, 1, 2, 3), weight=1)
         for i in range(6):
             self.grid_rowconfigure(i, weight=1)
 
-        # Écran de la calculatrice
         self.entry = ctk.CTkEntry(
             self, 
             corner_radius=10, 
@@ -1048,36 +1070,33 @@ class InterfaceCalculatrice(ctk.CTkFrame):
         self.entry.bind('<Return>', self._calculer)
         self.entry.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=10, pady=10)
 
-        # Définition de la nouvelle disposition des boutons (Grille 5x4)
-        # Ajout du point (.) pour les décimales, de la suppression (⌫) et des parenthèses ()
         boutons_layout = [
-            ("C", 1, 0, "#C0392B", "#E74C3C"),   # Effacer tout (Rouge)
-            ("(", 1, 1, "#2C3E50", "#34495E"),   # Parenthèse ouvrante
-            (")", 1, 2, "#2C3E50", "#34495E"),   # Parenthèse fermante
-            ("/", 1, 3, "#1B4F72", "#2980B9"),   # Division
+            ("C", 1, 0, "#C0392B", "#E74C3C"),
+            ("(", 1, 1, "#2C3E50", "#34495E"),
+            (")", 1, 2, "#2C3E50", "#34495E"),
+            ("/", 1, 3, "#1B4F72", "#2980B9"),
             
             ("7", 2, 0, "#333333", "#444444"),
             ("8", 2, 1, "#333333", "#444444"),
             ("9", 2, 2, "#333333", "#444444"),
-            ("*", 2, 3, "#1B4F72", "#2980B9"),   # Multiplication
+            ("*", 2, 3, "#1B4F72", "#2980B9"),
             
             ("4", 3, 0, "#333333", "#444444"),
             ("5", 3, 1, "#333333", "#444444"),
             ("6", 3, 2, "#333333", "#444444"),
-            ("-", 3, 3, "#1B4F72", "#2980B9"),   # Soustraction
+            ("-", 3, 3, "#1B4F72", "#2980B9"),
             
             ("1", 4, 0, "#333333", "#444444"),
             ("2", 4, 1, "#333333", "#444444"),
             ("3", 4, 2, "#333333", "#444444"),
-            ("+", 4, 3, "#1B4F72", "#2980B9"),   # Addition
+            ("+", 4, 3, "#1B4F72", "#2980B9"),
             
             ("0", 5, 0, "#333333", "#444444"),
-            (".", 5, 1, "#333333", "#444444"),   # Point décimal crucial
-            ("⌫", 5, 2, "#7F8C8D", "#95A5A6"),   # Effacer un caractère (Backspace)
-            ("=", 5, 3, "#1E8449", "#27AE60")    # Égal (Vert)
+            (".", 5, 1, "#333333", "#444444"),
+            ("⌫", 5, 2, "#7F8C8D", "#95A5A6"),
+            ("=", 5, 3, "#1E8449", "#27AE60")
         ]
 
-        # Création dynamique des boutons avec leurs styles respectifs
         for (text, row, col, fg_col, hover_col) in boutons_layout:
             btn = ctk.CTkButton(
                 self, 
@@ -1091,13 +1110,11 @@ class InterfaceCalculatrice(ctk.CTkFrame):
             btn.grid(row=row, column=col, sticky="nsew", padx=4, pady=4)
 
     def _gerer_clic(self, arg):
-        """Aiguille l'action selon le bouton cliqué."""
         if arg == "=":
             self._calculer()
         elif arg == "C":
             self.entry.delete(0, ctk.END)
         elif arg == "⌫":
-            # Supprime uniquement le dernier caractère de l'entrée
             current_text = self.entry.get()
             if current_text:
                 self.entry.delete(len(current_text) - 1, ctk.END)
@@ -1105,20 +1122,16 @@ class InterfaceCalculatrice(ctk.CTkFrame):
             self.entry.insert(ctk.END, arg)
 
     def _calculer(self, event=None):
-        """Exécute le calcul de manière sécurisée."""
         expr = self.entry.get().strip()
         if not expr: 
             return
         try:
-            # Caractères autorisés incluant les chiffres, opérateurs de base, points et parenthèses
             allowed_chars = "0123456789+-*/.()"
             if any(char not in allowed_chars for char in expr):
                 raise ValueError("Caractère non autorisé")
 
-            # Évaluation sécurisée de l'expression mathématique
             resultat = eval(expr)
             
-            # Formet le résultat pour éviter les ".0" superflus si c'est un entier
             if isinstance(resultat, float) and resultat.is_integer():
                 resultat = int(resultat)
 
@@ -1131,12 +1144,10 @@ class InterfaceCalculatrice(ctk.CTkFrame):
 
 
 class InterfaceDettes(ctk.CTkFrame):
-    """Interface de gestion des créances et dettes des clients au design ultra-soigné."""
     def __init__(self, master, base_donnees=fichier_donnees):
         super().__init__(master, fg_color="transparent")
         self.base_donnees = base_donnees
 
-        # --- TITRE DE LA SECTION & TOTAL CUMULÉ ---
         self.header_frame = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=12)
         self.header_frame.pack(fill="x", padx=15, pady=(15, 10))
         
@@ -1146,7 +1157,6 @@ class InterfaceDettes(ctk.CTkFrame):
         self.lbl_total_dettes = ctk.CTkLabel(self.header_frame, text="Total dû : 0 FC", font=("Arial", 14, "bold"), text_color="#E74C3C")
         self.lbl_total_dettes.pack(side="right", padx=15, pady=12)
 
-        # --- ZONE DE SAISIE MODERNE ---
         self.frame_input = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=12)
         self.frame_input.pack(fill="x", padx=15, pady=5)
         self.frame_input.grid_columnconfigure((0, 1, 2), weight=1)
@@ -1171,11 +1181,9 @@ class InterfaceDettes(ctk.CTkFrame):
         )
         self.btn_ajouter.grid(row=0, column=3, padx=10, pady=10)
 
-        # Label de notification/feedback utilisateur
         self.lbl_msg = ctk.CTkLabel(self.frame_input, text="", font=("Arial", 11))
         self.lbl_msg.grid(row=1, column=0, columnspan=4, pady=(0, 8))
 
-        # --- LISTE DES DETTES (CARDS DESIGN) ---
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.scroll_frame.pack(fill="both", expand=True, padx=15, pady=10)
         self.scroll_frame.grid_columnconfigure(0, weight=1)
@@ -1204,7 +1212,6 @@ class InterfaceDettes(ctk.CTkFrame):
             conn.commit()
             conn.close()
 
-            # Réinitialisation des champs et message de succès
             self.entry_nom.delete(0, ctk.END)
             self.entry_somme.delete(0, ctk.END)
             self.entry_tel.delete(0, ctk.END)
@@ -1235,7 +1242,6 @@ class InterfaceDettes(ctk.CTkFrame):
             nom = securite.decrypter(nom_c)
             total_general += somme
 
-            # Carte individuelle (Card Container) pour chaque dette
             card = ctk.CTkFrame(self.scroll_frame, fg_color="#1E1E1E", corner_radius=10)
             card.pack(fill="x", padx=5, pady=6)
             card.grid_columnconfigure(0, weight=2)
@@ -1261,7 +1267,6 @@ class InterfaceDettes(ctk.CTkFrame):
             )
             btn_solder.grid(row=0, column=4, padx=12, pady=12, sticky="e")
 
-        # Mise à jour du total cumulé dans l'en-tête
         self.lbl_total_dettes.configure(text=f"Total dû : {total_general:,} FC")
 
     def _solder_dette(self, id_dette):
@@ -1279,17 +1284,14 @@ class InterfaceLlink(ctk.CTkFrame):
         self.api = LlinkApiClient()
         self.base_donnees = base_donnees
 
-        # --- CONFIGURATION DE LA GRILLE PRINCIPALE ---
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
         self.grid_columnconfigure(0, weight=1)
 
-        # --- ZONE DE DÉFILEMENT DES MESSAGES ---
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#121212", corner_radius=12)
         self.scroll_frame.grid(row=0, column=0, sticky="nsew", padx=15, pady=(15, 10))
         self.scroll_frame.grid_columnconfigure(0, weight=1)
 
-        # --- ZONE DE SAISIE ET BOUTON D'ENVOI ---
         self.input_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.input_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 15))
         self.input_frame.grid_columnconfigure(0, weight=1)
@@ -1317,13 +1319,11 @@ class InterfaceLlink(ctk.CTkFrame):
         self.btn_send.grid(row=0, column=1, sticky="e")
 
     def _obtenir_contexte_commercant(self) -> str:
-        """Construit un contexte détaillé sur l'état de la boutique pour informer Llink."""
         context = "CONTEXTE BOUTIQUE COMMERÇANT:\n"
         try:
             conn = sqlite3.connect(self.base_donnees)
             cursor = conn.cursor()
 
-            # 1. Informations générales (Lecture par colonnes)
             try:
                 cursor.execute("SELECT nom_boutique, numero_phone, adresse_physique, devise_main FROM parametres LIMIT 1")
                 row = cursor.fetchone()
@@ -1334,10 +1334,9 @@ class InterfaceLlink(ctk.CTkFrame):
                     context += f"- Devise : {devise}\n"
                 else:
                     context += "- Informations générales boutique non configurées.\n"
-            except Exception as e:
+            except Exception:
                 context += "- Informations générales boutique non configurées.\n"
 
-            # 2. Analyse des stocks
             try:
                 cursor.execute("SELECT nom, quantite, seuil_critique FROM stock")
                 stock_data = cursor.fetchall()
@@ -1351,7 +1350,7 @@ class InterfaceLlink(ctk.CTkFrame):
                         alertes.append(str(nom_p))
                 context += f"- Nombre total de références en stock : {len(stock_data)}\n"
                 context += f"- Produits en rupture/seuil critique : {', '.join(alertes) if alertes else 'Aucun'}\n"
-            except Exception as e:
+            except Exception:
                 context += "- Stock non encore initialisé.\n"
 
             conn.close()
@@ -1367,11 +1366,8 @@ class InterfaceLlink(ctk.CTkFrame):
             return
         self.entry.delete(0, ctk.END)
 
-        # Ajout du message Utilisateur (Aligné à droite)
         self._ajouter_bulle_message(text, expediteur="user")
-
-        # Bulle de chargement temporaire pour l'IA
-        loading_id = self._ajouter_bulle_message("🤖 Llink réfléchit...", expediteur="ai_loading")
+        self._ajouter_bulle_message("🤖 Llink réfléchit...", expediteur="ai_loading")
 
         def on_success(texte_reponse):
             self.after(0, lambda: self._mettre_a_jour_bulle_ai(texte_reponse, succes=True))
@@ -1379,7 +1375,6 @@ class InterfaceLlink(ctk.CTkFrame):
         def on_error(erreur):
             self.after(0, lambda: self._mettre_a_jour_bulle_ai(f"Erreur de communication : {erreur}", succes=False))
 
-        # Transmission du payload conforme à la structure FastAPI
         payload = {
             "message": text,
             "model": "gemini-2.5-flash",
@@ -1390,16 +1385,15 @@ class InterfaceLlink(ctk.CTkFrame):
         self.api.send_prompt_async("/api/chat", payload, on_success, on_error)
 
     def _ajouter_bulle_message(self, texte, expediteur="user"):
-        """Crée une bulle de discussion avec couleur de fond fusionnée et limites de largeur."""
         bubble_container = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
         bubble_container.pack(fill="x", padx=10, pady=6, anchor="e" if expediteur == "user" else "w")
 
         if expediteur == "user":
-            bg_color = "#1F618D" # Bleu pour l'utilisateur
+            bg_color = "#1F618D"
             header_text = "👤 Vous"
             align_anchor = "e"
         else:
-            bg_color = "transparent" # MÊME COULEUR QUE LE FOND DE L'INTERFACE
+            bg_color = "transparent"
             header_text = "🤖 Llink IA"
             align_anchor = "w"
 
@@ -1426,28 +1420,25 @@ class InterfaceLlink(ctk.CTkFrame):
         self.scroll_frame._parent_canvas.yview_moveto(1.0)
 
     def _parser_et_afficher_texte(self, parent_frame, texte, text_color):
-        """Affiche le texte avec retour à la ligne automatique (wraplength) pour éviter les débordements."""
-        # Un CTkLabel global avec wraplength empêche tout dépassement sur les côtés
         lbl_message = ctk.CTkLabel(
             parent_frame,
-            text=texte.replace("**", ""), # Nettoie le markdown basique
+            text=texte.replace("**", ""),
             font=("Arial", 11),
             text_color=text_color,
             justify="left",
-            wraplength=450 # Limite la largeur du texte à 450px pour forcer le retour à la ligne
+            wraplength=450
         )
         lbl_message.pack(anchor="w", pady=2)
 
     def _mettre_a_jour_bulle_ai(self, texte_reponse, succes=True):
-        """Met à jour le contenu de la dernière bulle IA après réception de la réponse asynchrone."""
-        # Nettoyer le contenu de chargement précédent
-        for widget in self.derniere_bulle_container.winfo_children():
-            widget.destroy()
+        if hasattr(self, 'derniere_bulle_container'):
+            for widget in self.derniere_bulle_container.winfo_children():
+                widget.destroy()
 
-        if not succes:
-            ctk.CTkLabel(self.derniere_bulle_container, text=f"❌ {texte_reponse}", font=("Arial", 11, "bold"), text_color="#F1948A", fg_color="transparent").pack(anchor="w")
-        else:
-            self._parser_et_afficher_texte(self.derniere_bulle_container, texte_reponse, "white")
+            if not succes:
+                ctk.CTkLabel(self.derniere_bulle_container, text=f"❌ {texte_reponse}", font=("Arial", 11, "bold"), text_color="#F1948A", fg_color="transparent").pack(anchor="w")
+            else:
+                self._parser_et_afficher_texte(self.derniere_bulle_container, texte_reponse, "white")
 
         self.scroll_frame._parent_canvas.yview_moveto(1.0)
 
@@ -1486,9 +1477,6 @@ class InterfaceOutils(ctk.CTkFrame):
 # ==========================================
 # STATISTIQUES ET GRAPHIQUES (100% CTKCANVAS)
 # ==========================================
-import sqlite3
-import customtkinter as ctk
-
 class InterfaceStatistiques(ctk.CTkFrame):
     """Interface d'analyse statistique et d'historique 100% native avec CTkCanvas."""
     
@@ -1496,7 +1484,6 @@ class InterfaceStatistiques(ctk.CTkFrame):
         super().__init__(master, width=width, height=height, fg_color=bg_color)
         self.base_donnees = base_donnees
 
-        # Barre de Navigation Supérieure
         self.top_menu = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=10)
         self.top_menu.pack(fill="x", padx=10, pady=10)
 
@@ -1509,10 +1496,8 @@ class InterfaceStatistiques(ctk.CTkFrame):
         )
         btn_menu.pack(side="left", padx=10, pady=8)
 
-        # Zone d'affichage dynamique (Conteneurs)
         self.frame_menu_principal = ctk.CTkFrame(self, fg_color="transparent")
         
-        # Boutons du menu
         li0 = [
             ("📜 Historique Ventes", 0), 
             ("📥 Historique Achats", 1), 
@@ -1532,27 +1517,21 @@ class InterfaceStatistiques(ctk.CTkFrame):
             )
             btn.pack(fill="x", pady=8, padx=40)
 
-        # Initialisation des vues
         self.frames = []
         for t in range(4):
             if t < 2:
-                # Vues avec Scroll pour les historiques
                 self.frames.append(ctk.CTkScrollableFrame(self, fg_color="#121212", corner_radius=10))
             else:
-                # Vues fixes pour les graphiques CTkCanvas
                 self.frames.append(ctk.CTkFrame(self, fg_color="#121212", corner_radius=10))
         
         self.frames.append(self.frame_menu_principal)
         
-        # Afficher le menu par défaut
         self._masquer_afficher_partie(4)
 
     def _masquer_afficher_partie(self, index):
-        """Affiche le frame correspondant et exécute son traitement de données."""
         for t, frame in enumerate(self.frames):
             if index == t:
                 frame.pack(expand=True, fill="both", padx=10, pady=10)
-                # Déclenchement automatique des chargements
                 if index == 0:
                     self._afficher_historique(mode="vente")
                 elif index == 1:
@@ -1565,29 +1544,23 @@ class InterfaceStatistiques(ctk.CTkFrame):
                 frame.pack_forget()
 
     def _afficher_historique(self, recherche="", mode="achat"):
-        """Génère l'historique des achats ou ventes avec recherche sécurisée."""
         target_frame = self.frames[1] if mode == "achat" else self.frames[0]
         titre = "📥 HISTORIQUE DES ACHATS" if mode == "achat" else "📜 HISTORIQUE DES VENTES"
         table = "achats" if mode == "achat" else "ventes"
 
-        # Nettoyage du conteneur
         for widget in target_frame.winfo_children():
             widget.destroy()
 
-        # En-tête Titre
         ctk.CTkLabel(target_frame, text=titre, font=('Arial', 18, 'bold'), text_color="#2ECC71").grid(row=0, column=0, columnspan=5, pady=(10, 15))
 
-        # Champ de Recherche
         entry_search = ctk.CTkEntry(target_frame, placeholder_text="🔍 Filtrer par nom de produit...", height=35)
         entry_search.grid(row=1, column=0, columnspan=5, sticky="ew", padx=10, pady=(0, 15))
         
         if recherche:
             entry_search.insert(0, recherche)
         
-        # On passe l'événement au binding sans détruire la vue de façon instable
         entry_search.bind("<KeyRelease>", lambda e: self._filtrer_historique_event(e, entry_search.get().strip(), mode))
 
-        # Colonnes de l'en-tête
         headers = ["PRODUIT", "QUANTITÉ", "TOTAL (FC)", "HEURE", "DATE"]
         for col_idx, text in enumerate(headers):
             lbl = ctk.CTkLabel(target_frame, text=text, font=("Arial", 11, "bold"), text_color="#A0A0A0")
@@ -1599,10 +1572,7 @@ class InterfaceStatistiques(ctk.CTkFrame):
             conn = sqlite3.connect(self.base_donnees)
             cursor = conn.cursor()
             
-            # Vérification préalable si la table existe et contient des enregistrements
             col_prix = "p_a_t" if mode == "achat" else "p_v_t"
-            
-            # Requête sécurisée avec fallback sur ROWID si 'id' n'existe pas
             cursor.execute(f"SELECT nom, quantite, {col_prix}, heure, date FROM {table} ORDER BY ROWID DESC")
             enregistrements = cursor.fetchall()
 
@@ -1614,13 +1584,11 @@ class InterfaceStatistiques(ctk.CTkFrame):
                 return
 
             for tupl in enregistrements:
-                # Décryptage sécurisé
                 try:
                     nom_decrypte = securite.decrypter(tupl[0]) if 'securite' in globals() else tupl[0]
                 except Exception:
                     nom_decrypte = str(tupl[0])
 
-                # Filtre de recherche
                 if recherche and recherche.lower() not in nom_decrypte.lower():
                     continue
 
@@ -1633,7 +1601,6 @@ class InterfaceStatistiques(ctk.CTkFrame):
 
                 row_offset += 1
 
-            # Affichage du Total Cumulé
             lbl_total_general = ctk.CTkLabel(
                 target_frame, 
                 text=f"TOTAL CUMULÉ : {total_cumule:,} FC", 
@@ -1649,11 +1616,9 @@ class InterfaceStatistiques(ctk.CTkFrame):
                 conn.close()
 
     def _filtrer_historique_event(self, event, terme, mode):
-        """Méthode auxiliaire pour gérer le filtre sans casser le focus du composant."""
         self._afficher_historique(recherche=terme, mode=mode)
 
     def _generer_graphique_ventes(self, parent_frame):
-        """Dessine un diagramme en bâtons dynamique des 5 produits les plus vendus (CTkCanvas Natif)."""
         for w in parent_frame.winfo_children(): 
             w.destroy()
 
@@ -1672,7 +1637,6 @@ class InterfaceStatistiques(ctk.CTkFrame):
         canvas = ctk.CTkCanvas(parent_frame, bg=bg_theme, highlightthickness=0, bd=0)
         canvas.pack(expand=True, fill='both', padx=15, pady=15)
 
-        # Titre
         canvas.create_text(250, 25, text="Top 5 des Produits les Plus Vendus 📊", fill="#2ECC71", font=("Arial", 14, "bold"))
 
         max_val = max(ventes) if max(ventes) > 0 else 1
@@ -1682,7 +1646,6 @@ class InterfaceStatistiques(ctk.CTkFrame):
         bar_width = 50
         spacing = 30
 
-        # Axe X
         canvas.create_line(30, start_y, 450, start_y, fill=text_color, width=2)
 
         for i, (prod, val) in enumerate(zip(produits, ventes)):
@@ -1692,18 +1655,13 @@ class InterfaceStatistiques(ctk.CTkFrame):
             y0 = start_y - bar_h
             y1 = start_y
 
-            # Barre du histogramme
             canvas.create_rectangle(x0, y0, x1, y1, fill='#2ECC71', outline="")
-            
-            # Valeur vendue
             canvas.create_text(x0 + bar_width / 2, y0 - 12, text=str(val), fill=text_color, font=("Arial", 10, "bold"))
             
-            # Nom du produit (tronqué)
             nom_court = prod[:8] + ".." if len(prod) > 8 else prod
             canvas.create_text(x0 + bar_width / 2, y1 + 15, text=nom_court, fill=text_color, font=("Arial", 9))
 
     def _generer_graphique_stocks(self, parent_frame):
-        """Dessine un camembert (Pie Chart) de la répartition globale du stock (CTkCanvas Natif)."""
         for w in parent_frame.winfo_children(): 
             w.destroy()
 
@@ -1744,7 +1702,6 @@ class InterfaceStatistiques(ctk.CTkFrame):
             canvas.create_arc(cx - r, cy - r, cx + r, cy + r, start=start_angle, extent=extent, fill=color, outline=bg_theme, width=2)
             start_angle += extent
 
-        # Légende
         lx, ly = 270, 110
         for label, size, color in zip(labels, sizes, colors):
             pct = (size / total) * 100
@@ -1764,14 +1721,12 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
         self.var_theme = ctk.StringVar(value="dark")
         self.var_verouillage = ctk.StringVar(value="desactiver")
 
-        # --- SECTION 1 : INFORMATIONS BOUTIQUE ---
         self._creer_titre_section("🏪 INFORMATIONS DE LA BOUTIQUE")
         
         frame_infos = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=10)
         frame_infos.pack(fill="x", padx=15, pady=8)
         frame_infos.grid_columnconfigure(1, weight=1)
 
-        # MAPPING DIRECT AVEC LES NOMS DE COLONNES SQL
         champs_infos = [
             ("Nom de la boutique", "nom_boutique"),
             ("Numéro de téléphone", "numero_phone"),
@@ -1785,7 +1740,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
             entry.grid(row=i, column=1, padx=15, pady=8, sticky="ew")
             self.entries[db_key] = entry
 
-        # --- SECTION 2 : SÉCURITÉ ---
         self._creer_titre_section("🔒 SÉCURITÉ & ACCÈS")
         
         frame_secu = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=10)
@@ -1804,7 +1758,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
         ctk.CTkRadioButton(frame_radio_verou, text="Activer", variable=self.var_verouillage, value="activer").pack(side="left", padx=10)
         ctk.CTkRadioButton(frame_radio_verou, text="Désactiver", variable=self.var_verouillage, value="desactiver").pack(side="left", padx=10)
 
-        # --- SECTION 3 : ACTIONS DE SAUVEGARDE ET RESTAURATION ---
         self._creer_titre_section("💾 SAUVEGARDE ET DONNÉES")
         
         frame_actions = ctk.CTkFrame(self, fg_color="transparent")
@@ -1838,7 +1791,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
             command=self._exporter_excel
         ).pack(fill="x", pady=4)
 
-        # --- SECTION 4 : APPARENCE ET À PROPOS ---
         self._creer_titre_section("🎨 APPARENCE & À PROPOS")
         
         frame_about = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=10)
@@ -1852,7 +1804,7 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
         ctk.CTkRadioButton(frame_radio_theme, text="Sombre", variable=self.var_theme, value="dark", command=self._changer_mode).pack(side="left", padx=10)
 
         ctk.CTkLabel(frame_about, text="Version", anchor="w").grid(row=1, column=0, padx=15, pady=6, sticky="w")
-        ctk.CTkLabel(frame_about, text="1.4.2", font=("Arial", 10, "bold"), text_color="#3498DB").grid(row=1, column=1, padx=15, pady=6, sticky="w")
+        ctk.CTkLabel(frame_about, text="1.9.2", font=("Arial", 10, "bold"), text_color="#3498DB").grid(row=1, column=1, padx=15, pady=6, sticky="w")
 
         ctk.CTkLabel(frame_about, text="Éditeur", anchor="w").grid(row=2, column=0, padx=15, pady=6, sticky="w")
         ctk.CTkLabel(frame_about, text="CRYPT Enterprise", font=("Arial", 10, "bold"), text_color="#2ECC71").grid(row=2, column=1, padx=15, pady=6, sticky="w")
@@ -1860,11 +1812,9 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
         ctk.CTkLabel(frame_about, text="Site Web", anchor="w").grid(row=3, column=0, padx=15, pady=6, sticky="w")
         ctk.CTkLabel(frame_about, text="https://klgaby440-lang.github.io/sokomaster/", text_color="#A9CCE3").grid(row=3, column=1, padx=15, pady=6, sticky="w")
 
-        # Chargement automatique au lancement
         self._charger_infos()
 
     def _creer_titre_section(self, titre):
-        """Méthode utilitaire pour afficher des titres de section propres."""
         lbl = ctk.CTkLabel(self, text=titre, font=("Arial", 13, "bold"), text_color="#A9CCE3", anchor="w")
         lbl.pack(fill="x", padx=15, pady=(15, 2))
 
@@ -1872,7 +1822,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
         ctk.set_appearance_mode(str(self.var_theme.get()))
 
     def _charger_infos(self):
-        """Charge la configuration depuis la table 'parametres'."""
         try:
             conn = sqlite3.connect(self.base_donnees)
             cursor = conn.cursor()
@@ -1887,7 +1836,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
             if row:
                 nom, phone, adresse, devise, pin, verou, theme = row
 
-                # Remplissage des champs Entry
                 self.entries["nom_boutique"].delete(0, "end")
                 self.entries["nom_boutique"].insert(0, str(nom or ""))
 
@@ -1903,7 +1851,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
                 self.entries["code_pin"].delete(0, "end")
                 self.entries["code_pin"].insert(0, str(pin or ""))
 
-                # Conversion des flags Integer (1/0) vers les RadioButtons
                 self.var_verouillage.set("activer" if verou == 1 else "desactiver")
                 
                 theme_str = "dark" if theme == 1 else "light"
@@ -1916,7 +1863,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
     def _sauvegarder_infos(self):
         try:
             nom = self.entries["nom_boutique"].get().strip()
-            # INNOVATION : Le téléphone reste un texte pour préserver le '+' ou le '0'
             phone = self.entries["numero_phone"].get().strip()
             adresse = self.entries["adresse_physique"].get().strip()
             devise = self.entries["devise_main"].get().strip()
@@ -1929,15 +1875,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
 
             conn = sqlite3.connect(self.base_donnees)
             cursor = conn.cursor()
-
-            # Création sécurisée avec le bon typage (TEXT pour numero_phone)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS parametres (
-                    nom_boutique TEXT, numero_phone TEXT, adresse_physique TEXT, 
-                    devise_main TEXT, code_pin INTEGER, verouillage INTEGER, 
-                    theme INTEGER, index_p INTEGER PRIMARY KEY
-                )
-            """)
 
             cursor.execute("SELECT COUNT(*) FROM parametres")
             count = cursor.fetchone()[0]
@@ -1962,7 +1899,6 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
             print(f"[Erreur Sauvegarde Paramètres] : {e}")
 
     def _exporter_excel(self):
-        """Exporte l'état des stocks et des ventes dans un fichier CSV compatible Excel."""
         filepath = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("Fichier CSV Excel", "*.csv")], title="Exporter les données")
         if not filepath: return
 
@@ -1988,12 +1924,13 @@ class InterfaceParametre(ctk.CTkScrollableFrame):
                     writer.writerow([securite.decrypter(row[0]), row[1], row[2], row[3], row[4]])
 
             conn.close()
+            messagebox.showinfo("Succès", "Données exportées avec succès ! 📊")
         except Exception as e:
             print(f"Erreur exportation Excel : {e}")
 
 
 class BarMenu(ctk.CTkFrame):
-    def __init__(self, master=None, bg_color="green"):
+    def __init__(self, master=None, bg_color="#145A32"):
         super().__init__(master, width=200, fg_color=bg_color, corner_radius=0)
 
         self.label = ctk.CTkLabel(self, text="🛒 SokoMaster", font=("Arial", 20, "bold"), text_color="white")
@@ -2005,6 +1942,9 @@ class BarMenu(ctk.CTkFrame):
         ctk.CTkButton(self, text="⚙️ Paramètres", font=("Arial", 14), command=self.master._print_parametre).pack(fill="x", pady=5, padx=10)
 
 
+# ==========================================
+# APPLICATION PRINCIPALE & NAVIGATION LAZY LOADING
+# ==========================================
 class Application(ctk.CTkFrame):
     def __init__(self, master=None, bg_color="gray15", b_d=fichier_donnees):
         super().__init__(master, fg_color=bg_color)
@@ -2028,135 +1968,73 @@ class Application(ctk.CTkFrame):
         self._print_stock_newp()
 
     def _hide_all(self):
-        for widget in self.main_view.winfo_children():
-            widget.pack_forget()
+        """Masque toutes les vues actuellement affichées dans la zone principale."""
+        if self.inventaire:
+            self.inventaire.pack_forget()
+        if self.outils:
+            self.outils.pack_forget()
+        if self.statistique:
+            self.statistique.pack_forget()
+        if self.parametres:
+            self.parametres.pack_forget()
 
     def _print_stock_newp(self):
         self._hide_all()
+        if not self.inventaire:
+            self.inventaire = InterfaceIventaire(self.main_view, base_donnees=self.b_d, bg_color=self.bg_color)
         self.inventaire.pack(expand=True, fill="both")
 
     def _print_outils(self):
         self._hide_all()
-        if self.outils is None:
-            # Instanciation uniquement lors du premier clic
+        if not self.outils:
             self.outils = InterfaceOutils(self.main_view, bg_color=self.bg_color)
         self.outils.pack(expand=True, fill="both")
 
     def _print_statistiques(self):
         self._hide_all()
-        if self.statistique is None:
-            self.statistique = InterfaceStatistiques(self.main_view, bg_color=self.bg_color, base_donnees=self.b_d)
-            self.statistique._afficher_historique()
-            self.statistique._afficher_historique(mode="vente")
+        if not self.statistique:
+            self.statistique = InterfaceStatistiques(self.main_view, base_donnees=self.b_d, bg_color=self.bg_color)
         self.statistique.pack(expand=True, fill="both")
 
     def _print_parametre(self):
         self._hide_all()
-        if self.parametres is None:
-            self.parametres = InterfaceParametre(self.main_view, bg_color=self.bg_color, base_donnees=self.b_d)
+        if not self.parametres:
+            self.parametres = InterfaceParametre(self.main_view, base_donnees=self.b_d, bg_color=self.bg_color)
         self.parametres.pack(expand=True, fill="both")
 
+
 # ==========================================
-# DEMARRAGE ET INITIALISATION BDD
+# POINT D'ENTRÉE DU PROGRAMME ET LOGIQUE D'ACTIVATION
 # ==========================================
-def initialiser_base_donnees(db_path=fichier_donnees):
-    """Garantit l'existence de toutes les tables nécessaires dans la BDD."""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # Table Stock
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS stock (
-            index_p INTEGER PRIMARY KEY,
-            nom TEXT,
-            quantite INTEGER,
-            seuil_critique INTEGER,
-            p_a_u REAL,
-            p_v_u REAL
-        )
-    """)
-    
-    # Table Achats
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS achats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT,
-            quantite INTEGER,
-            p_a_t REAL,
-            heure TEXT,
-            date TEXT,
-            index_p INTEGER
-        )
-    """)
-    
-    # Table Ventes
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS ventes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT,
-            quantite INTEGER,
-            p_v_t REAL,
-            heure TEXT,
-            date TEXT,
-            index_p INTEGER
-        )
-    """)
-    
-    # Table Dettes
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS dettes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT,
-            somme REAL,
-            telephone TEXT,
-            date TEXT
-        )
-    """)
-
-    # Table Activation
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS activation (
-            id INTEGER PRIMARY KEY,
-            code TEXT,
-            is_activated INTEGER
-        )
-    """)
-    cursor.execute("INSERT OR IGNORE INTO activation (id, code, is_activated) VALUES (1, '', 0)")
-    cursor.execute("CREATE TABLE IF NOT EXISTS parametres (cle TEXT PRIMARY KEY, valeur TEXT)")
-    conn.commit()
-    conn.close()
-
-def verifier_activation(db_path) -> bool:
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT is_activated FROM activation WHERE id = 1")
-    res = cursor.fetchone()
-    conn.close()
-    return res and res[0] == 1
-
-mettre_a_jour_splash("Chargement de l'interface... 🗄️", 0.75)
-
 if __name__ == "__main__":
+    # 1. Initialisation automatique de la BDD et des tables SQLite
+    initialiser_bdd(fichier_donnees)
 
-    def initialisation_lourde():
-        initialiser_base_donnees(fichier_donnees)
-        mettre_a_jour_splash("Chargement terminé... 🗄️", 1)
-        splash_frame.destroy() # On supprime l'écran de chargement
+    def lancer_application_principale():
+        splash_frame.destroy()
+        app = Application(root, bg_color="gray15", b_d=fichier_donnees)
+        app.pack(expand=True, fill="both")
 
-        def lancer_application_principale():
-            for widget in root.winfo_children():
-                widget.destroy()
-            app = Application(root, b_d=fichier_donnees)
-            app.pack(expand=ctk.YES, fill=ctk.BOTH)
+    def verifier_etat_activation():
+        try:
+            conn = sqlite3.connect(fichier_donnees)
+            cursor = conn.cursor()
+            cursor.execute("SELECT is_activated FROM activation WHERE id = 1")
+            row = cursor.fetchone()
+            conn.close()
 
-        if verifier_activation(fichier_donnees):
-            lancer_application_principale()
-        else:
-            interface_act = InterfaceActivation(root, on_activation_success=lancer_application_principale, base_donnees=fichier_donnees)
-            interface_act.pack(expand=True, fill="both")
-            
-    initialisation_lourde()
-    
-    # On lance l'initialisation après 100ms pour laisser l'interface s'afficher proprement
-    root.after(1000, initialisation_lourde)
+            if row and row[0] == 1:
+                # Si déjà activé : Lancement direct
+                lancer_application_principale()
+            else:
+                # Sinon : Affichage de la fenêtre d'activation
+                splash_frame.destroy()
+                activation_view = InterfaceActivation(root, on_activation_success=lancer_application_principale)
+                activation_view.pack(expand=True, fill="both")
+        except Exception as e:
+            print(f"Erreur vérification activation : {e}")
+
+    # Simulation d'un chargement rapide avant contrôle de licence
+    mettre_a_jour_splash("Démarrage de SokoMaster... 🚀", 1.0)
+    root.after(1500, verifier_etat_activation)
     root.mainloop()
