@@ -393,15 +393,22 @@ class InterfaceStock(ctk.CTkFrame):
         try:
             conn = sqlite3.connect(self.base_donnees)
             cursor = conn.cursor()
-            cursor.execute("SELECT nom, quantite, seuil_critique, p_a_u, p_v_u, index_p FROM stock")
+            
+            # Si on ne recherche rien, on limite aux 50 premiers produits pour ne pas freezer l'interface
+            if not recherche:
+                cursor.execute("SELECT nom, quantite, seuil_critique, p_a_u, p_v_u, index_p FROM stock LIMIT 50")
+            else:
+                cursor.execute("SELECT nom, quantite, seuil_critique, p_a_u, p_v_u, index_p FROM stock")
+                
             produits = cursor.fetchall()
-
+            
             row_index = 0
             for tupl in produits:
                 nom_decrypte = securite.decrypter(tupl[0])
 
                 if recherche and recherche.lower() not in nom_decrypte.lower():
                     continue
+                # ... (le reste de ta fonction pour dessiner les widgets reste identique)
 
                 self.frame.grid_rowconfigure(row_index, weight=1)
                 index_p = tupl[5]
@@ -1084,6 +1091,7 @@ class Application(ctk.CTkFrame):
     def __init__(self, master=None, bg_color="gray15", b_d=fichier_donnees):
         super().__init__(master, fg_color=bg_color)
         self.b_d = b_d
+        self.bg_color = bg_color
 
         self.barmenu = BarMenu(self, bg_color="#145A32")
         self.barmenu.pack(side="left", fill="y")
@@ -1091,10 +1099,13 @@ class Application(ctk.CTkFrame):
         self.main_view = ctk.CTkFrame(self, fg_color="transparent")
         self.main_view.pack(side="right", expand=True, fill="both")
 
+        # Seule l'interface principale est chargée au démarrage
         self.inventaire = InterfaceIventaire(self.main_view, base_donnees=b_d, bg_color=bg_color)
-        self.outils = InterfaceOutils(self.main_view, bg_color=bg_color)
-        self.statistique = InterfaceStatistiques(self.main_view, bg_color=bg_color, base_donnees=b_d)
-        self.parametres = InterfaceParametre(self.main_view, bg_color=bg_color, base_donnees=b_d)
+        
+        # Les autres vues sont initialisées à None (Lazy Loading)
+        self.outils = None
+        self.statistique = None
+        self.parametres = None
 
         self._print_stock_newp()
 
@@ -1108,16 +1119,23 @@ class Application(ctk.CTkFrame):
 
     def _print_outils(self):
         self._hide_all()
+        if self.outils is None:
+            # Instanciation uniquement lors du premier clic
+            self.outils = InterfaceOutils(self.main_view, bg_color=self.bg_color)
         self.outils.pack(expand=True, fill="both")
 
     def _print_statistiques(self):
         self._hide_all()
-        self.statistique._afficher_historique()
-        self.statistique._afficher_historique(mode="vente")
+        if self.statistique is None:
+            self.statistique = InterfaceStatistiques(self.main_view, bg_color=self.bg_color, base_donnees=self.b_d)
+            self.statistique._afficher_historique()
+            self.statistique._afficher_historique(mode="vente")
         self.statistique.pack(expand=True, fill="both")
 
     def _print_parametre(self):
         self._hide_all()
+        if self.parametres is None:
+            self.parametres = InterfaceParametre(self.main_view, bg_color=self.bg_color, base_donnees=self.b_d)
         self.parametres.pack(expand=True, fill="both")
 
 # ==========================================
@@ -1149,22 +1167,37 @@ def verifier_activation(db_path) -> bool:
     return res and res[0] == 1
 
 if __name__ == "__main__":
-    initialiser_base_donnees(fichier_donnees)
-
+    # Avant toute initialisation lourde, on crée la fenêtre
     root = ctk.CTk()
     root.geometry("1000x650")
     root.title("SokoMaster - CRYPT Enterprise")
 
-    def lancer_application_principale():
-        for widget in root.winfo_children():
-            widget.destroy()
-        app = Application(root, b_d=fichier_donnees)
-        app.pack(expand=ctk.YES, fill=ctk.BOTH)
+    # On affiche un écran de chargement basique immédiatement
+    splash_frame = ctk.CTkFrame(root)
+    splash_frame.pack(expand=True, fill="both")
+    ctk.CTkLabel(splash_frame, text="SokoMaster", font=("Arial", 36, "bold"), text_color="#2ECC71").pack(pady=(200, 20))
+    ctk.CTkLabel(splash_frame, text="Chargement des modules cryptographiques et de la base de données... ⏳", font=("Arial", 14)).pack()
 
-    if verifier_activation(fichier_donnees):
-        lancer_application_principale()
-    else:
-        interface_act = InterfaceActivation(root, on_activation_success=lancer_application_principale, base_donnees=fichier_donnees)
-        interface_act.pack(expand=True, fill="both")
+    # On force la mise à jour de l'écran pour que l'utilisateur voie le message
+    root.update()
 
+    def initialisation_lourde():
+        initialiser_base_donnees(fichier_donnees)
+        splash_frame.destroy() # On supprime l'écran de chargement
+
+        def lancer_application_principale():
+            for widget in root.winfo_children():
+                widget.destroy()
+            app = Application(root, b_d=fichier_donnees)
+            app.pack(expand=ctk.YES, fill=ctk.BOTH)
+
+        if verifier_activation(fichier_donnees):
+            lancer_application_principale()
+        else:
+            interface_act = InterfaceActivation(root, on_activation_success=lancer_application_principale, base_donnees=fichier_donnees)
+            interface_act.pack(expand=True, fill="both")
+
+    # On lance l'initialisation après 100ms pour laisser l'interface s'afficher proprement
+    root.after(100, initialisation_lourde)
+    
     root.mainloop()
