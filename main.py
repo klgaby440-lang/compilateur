@@ -11,9 +11,6 @@ root.geometry("1000x650")
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("green")
 
-# Retrait temporaire des bordures Windows pour un vrai Splash Screen moderne
-root.overrideredirect(True)
-
 # Centrage parfait sur l'écran
 screen_width = root.winfo_screenwidth()
 screen_height = root.winfo_screenheight()
