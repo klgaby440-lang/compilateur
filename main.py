@@ -1,19 +1,62 @@
 import customtkinter as ctk
+import time
 
-# Avant toute initialisation lourde, on crée la fenêtre
+# ==========================================
+# 🚀 1. INITIALISATION DU SPLASH SCREEN ULTRA-RAPIDE (< 3s)
+# ==========================================
 root = ctk.CTk()
-root.geometry("1000x650")
 root.title("SokoMaster - CRYPT Enterprise")
+root.geometry("1000x650")
 
-# On affiche un écran de chargement basique immédiatement
-splash_frame = ctk.CTkFrame(root)
-splash_frame.pack(expand=True, fill="both")
-ctk.CTkLabel(splash_frame, text="SokoMaster", font=("Arial", 36, "bold"), text_color="#2ECC71").pack(pady=(200, 20))
-frame_texte_splash = ctk.CTkLabel(splash_frame, text="Chargement des modules cryptographiques et de la base de données... ⏳", font=("Arial", 14))
-frame_texte_splash.pack()
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("green")
 
-# On force la mise à jour de l'écran pour que l'utilisateur voie le message
+# Retrait temporaire des bordures Windows pour un vrai Splash Screen moderne
+root.overrideredirect(True)
+
+# Centrage parfait sur l'écran
+screen_width = root.winfo_screenwidth()
+screen_height = root.winfo_screenheight()
+x = int((screen_width / 2) - (1000 / 2))
+y = int((screen_height / 2) - (650 / 2))
+root.geometry(f"1000x650+{x}+{y}")
+
+# Conteneur principal du Splash Screen
+splash_frame = ctk.CTkFrame(
+    root, 
+    fg_color="#121212", 
+    corner_radius=20, 
+    border_width=2, 
+    border_color="#2ECC71"
+)
+splash_frame.pack(expand=True, fill="both", padx=5, pady=5)
+
+# Composants Visuels
+lbl_logo = ctk.CTkLabel(splash_frame, text="🛒", font=("Arial", 60))
+lbl_logo.pack(pady=(150, 10))
+
+lbl_titre = ctk.CTkLabel(splash_frame, text="SokoMaster", font=("Arial", 38, "bold"), text_color="#2ECC71")
+lbl_titre.pack(pady=(0, 2))
+
+lbl_sous_titre = ctk.CTkLabel(splash_frame, text="CRYPT Enterprise • High Resolution Systems", font=("Arial", 12, "bold"), text_color="#7F8C8D")
+lbl_sous_titre.pack(pady=(0, 35))
+
+# Barre de progression dynamique
+progress_bar = ctk.CTkProgressBar(splash_frame, width=420, height=10, progress_color="#2ECC71", fg_color="#222222")
+progress_bar.set(0.0)
+progress_bar.pack(pady=(0, 12))
+
+lbl_status = ctk.CTkLabel(splash_frame, text="Initialisation du système... ⚡", font=("Arial", 12, "italic"), text_color="#BDC3C7")
+lbl_status.pack()
+
+# Affichage visuel immédiat avant le chargement des lourdes dépendances
 root.update()
+
+def mettre_a_jour_splash(texte: str, progression: float):
+    """Met à jour l'état de la barre et du texte du splash screen en temps réel."""
+    lbl_status.configure(text=texte)
+    progress_bar.set(progression)
+    root.update()
     
 import sqlite3
 import os
@@ -32,7 +75,7 @@ import math
 
 # Cryptage sécurisé
 from cryptography.fernet import Fernet
-frame_texte_splash.configure(text="Module charger avec succès")
+mettre_a_jour_splash("Chargement du moteur SQLite et des utilitaires... 🗄️", 0.25)
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("green")
@@ -948,7 +991,7 @@ class InterfaceNewProduct(ctk.CTkFrame):
         finally:
             if conn: conn.close()
 
-frame_texte_splash.configure(text="Chargement bientôt terminé...")
+mettre_a_jour_splash("Chargement des données... 🗄️", 0.5)
 
 
 class InterfaceIventaire(ctk.CTkFrame):
@@ -2094,12 +2137,13 @@ def verifier_activation(db_path) -> bool:
     conn.close()
     return res and res[0] == 1
 
-frame_texte_splash.configure(text="Chargement terminé...")
+mettre_a_jour_splash("Chargement de l'interface... 🗄️", 0.75)
 
 if __name__ == "__main__":
 
     def initialisation_lourde():
         initialiser_base_donnees(fichier_donnees)
+        mettre_a_jour_splash("Chargement terminé... 🗄️", 1)
         splash_frame.destroy() # On supprime l'écran de chargement
 
         def lancer_application_principale():
