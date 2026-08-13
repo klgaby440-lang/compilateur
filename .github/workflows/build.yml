@@ -1,4 +1,4 @@
-name: Build SokoMaster EXE
+name: Build SokoMaster Installer (Nuitka + Inno Setup)
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
 
 jobs:
   # ==========================================
-  # JOB 1 : COMPILATION AVEC NUITKA
+  # JOB UNIQUE : COMPILATION NUITKA & INSTALLATEUR
   # ==========================================
-  build-nuitka:
+  build-installer:
     runs-on: windows-latest
 
     steps:
@@ -21,57 +21,26 @@ jobs:
       with:
         python-version: '3.12'
 
-    - name: 📦 Installer les dépendances
+    - name: 📦 Installer les dépendances Python
       run: |
         python -m pip install --upgrade pip
-        pip install customtkinter cryptography httpx nuitka
+        pip install customtkinter cryptography httpx nuitka fpdf
 
-    - name: 🔨 Compiler avec Nuitka
+    - name: 🔨 Compiler avec Nuitka (Mode Standalone)
       run: |
-        python -m nuitka --standalone --onefile --windows-console-mode=disable --enable-plugin=tk-inter --company-name="CRYPT" --product-name="SokoMaster" --file-version=1.0.0.0 --product-version=1.0.0.0 --assume-yes-for-downloads --output-dir="dist_nuitka" main.py
-        
-    - name: 🚀 Uploader l'exécutable Nuitka
-      uses: actions/upload-artifact@v4
-      with:
-        name: SokoMaster-Nuitka-Windows-EXE
-        path: dist_nuitka/*.exe
+        python -m nuitka --standalone --windows-console-mode=disable --enable-plugin=tk-inter --company-name="CRYPT Enterprise" --product-name="SokoMaster" --file-version=1.0.0.0 --product-version=1.0.0.0 --assume-yes-for-downloads --output-dir="dist" main.py
 
-  # ==========================================
-  # JOB 2 : COMPILATION AVEC PYOXIDIZER
-  # ==========================================
-  build-pyoxidizer:
-    runs-on: windows-latest
-
-    steps:
-    - name: 📥 Cloner le dépôt
-      uses: actions/checkout@v4
-
-    - name: 🐍 Configurer Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11' # PyOxidizer offre une excellente stabilité avec Python 3.11/3.12
-
-    - name: 🦀 Installer la chaîne d'outils Rust
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: 📦 Installer les dépendances et PyOxidizer
+    - name: 🛠️ Installer Inno Setup
       run: |
-        python -m pip install --upgrade pip
-        pip install pyoxidizer customtkinter cryptography httpx
+        choco install innosetup -y
 
-    - name: 🛠️ Générer la configuration PyOxidizer (si absente)
+    - name: 📦 Générer l'Installeur SokoMaster (.exe)
       run: |
-        if (!(Test-Path "pyoxidizer.bzl")) {
-          pyoxidizer init-config-file
-        }
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup_script.iss
       shell: powershell
 
-    - name: 🔨 Compiler avec PyOxidizer
-      run: |
-        pyoxidizer build --release
-
-    - name: 🚀 Uploader l'exécutable PyOxidizer
+    - name: 🚀 Uploader l'installeur final SokoMaster
       uses: actions/upload-artifact@v4
       with:
-        name: SokoMaster-PyOxidizer-Windows-EXE
-        path: build/**/release/exe/*.exe
+        name: SokoMaster-Setup-Windows
+        path: Output/SokoMaster_Setup_v1.0.exe
