@@ -14,16 +14,45 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 from cryptography.fernet import Fernet
+from PIL import Image
+import sys
 
 # ==========================================
 # 🚀 1. INITIALISATION DU SPLASH SCREEN ULTRA-RAPIDE (< 3s)
 # ==========================================
+def obtenir_chemin_ressource(nom_fichier: str) -> str:
+    """
+    Permet de récupérer le chemin absolu d'une ressource 
+    que ce soit en mode script ou une fois compilé avec Nuitka.
+    """
+    if getattr(sys, 'frozen', False):
+        # Si l'application est compilée (Nuitka / PyInstaller)
+        chemin_base = os.path.dirname(sys.executable)
+    else:
+        # Si on est en train de coder dans le script classique
+        chemin_base = os.path.abspath(".")
+    
+    return os.path.join(chemin_base, nom_fichier)
+
+# Utilisation des chemins sécurisés
+chemin_icone = obtenir_chemin_ressource("icon_soko_master.ico")
+chemin_logo = obtenir_chemin_ressource("logo_soko_master.png")
 root = ctk.CTk()
 root.title("SokoMaster - CRYPT Enterprise")
 root.geometry("1000x650")
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("green")
+image_logo = Image.open(chemin_logo)
+
+# Appliquer l'icône à la fenêtre principal sous Windows
+if os.path.exists(chemin_icone):
+    root.iconbitmap(chemin_icone)
+    mon_image_ctk = ctk.CTkImage(
+        light_image=image_logo, 
+        dark_image=image_logo, 
+        size=(120, 120)  # Ajuste les dimensions selon tes besoins
+    )
 
 # Centrage parfait sur l'écran
 screen_width = root.winfo_screenwidth()
@@ -43,8 +72,13 @@ splash_frame = ctk.CTkFrame(
 splash_frame.pack(expand=True, fill="both", padx=5, pady=5)
 
 # Composants Visuels
-lbl_logo = ctk.CTkLabel(splash_frame, text="🛒", font=("Arial", 60))
-lbl_logo.pack(pady=(150, 10))
+if mon_image_ctk:
+    lbl_logo = ctk.CTkLabel(splash_frame, text="", image=mon_image_ctk)
+    lbl_logo.pack(pady=(150, 10))
+
+else:
+    lbl_logo = ctk.CTkLabel(splash_frame, text="🛒", font=("Arial", 60))
+    lbl_logo.pack(pady=(150, 10))
 
 lbl_titre = ctk.CTkLabel(splash_frame, text="SokoMaster", font=("Arial", 38, "bold"), text_color="#2ECC71")
 lbl_titre.pack(pady=(0, 2))
@@ -397,7 +431,7 @@ class InterfaceRecu(ctk.CTkToplevel):
     def __init__(self, master=None, base_donnees="bd_prd4_sqlt3_v1.0.0.crypt"):
         super().__init__(master)
         self.title("🧾 Générateur de Reçu - SokoMaster")
-        self.geometry("420x650")
+        self.geometry("480x650")
         self.resizable(False, False)
         self.base_donnees = base_donnees
         self.grab_set()
