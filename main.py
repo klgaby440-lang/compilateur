@@ -73,6 +73,29 @@ mettre_a_jour_splash("Chargement du moteur SQLite et des utilitaires... 🗄️"
 fichier_donnees = "bd_prd4_sqlt3_v1.0.0.crypt"
 
 # ==========================================
+# 📍 GESTION DU DOSSIER DE DONNÉES SÉCURISÉ (PERMISSIONS)
+# ==========================================
+def obtenir_dossier_donnees() -> str:
+    """
+    Retourne le chemin d'accès dans AppData (Windows) ou Home (Linux)
+    afin de garantir les droits d'écriture et éviter PermissionError.
+    """
+    if os.name == 'nt':  # Windows
+        base_dir = os.getenv('APPDATA', os.path.expanduser('~'))
+    else:  # Linux / Mac
+        base_dir = os.path.expanduser('~')
+    
+    dossier_app = os.path.join(base_dir, "SokoMaster_CRYPT")
+    os.makedirs(dossier_app, exist_ok=True)  # Crée le dossier s'il n'existe pas
+    return dossier_app
+
+# Dossier d'application dédié
+DOSSIER_DONNEES = obtenir_dossier_donnees()
+
+# Fichier de base de données situé dans le dossier autorisé
+fichier_donnees = os.path.join(DOSSIER_DONNEES, "bd_prd4_sqlt3_v1.0.0.crypt")
+
+# ==========================================
 # INITIALISATION ET CRÉATION DES TABLES SQLITE
 # ==========================================
 def initialiser_bdd(base_donnees: str = fichier_donnees):
@@ -180,7 +203,8 @@ def generer_cle_activation_valide(hw_id: str) -> str:
 # ==========================================
 class GestionnaireSecurite:
     """Gère le chiffrement symétrique Fernet des données sensibles de la BDD."""
-    FICHIER_CLE = "secret.key"
+    # Chemin absolu sécurisé pour la clé Fernet
+    FICHIER_CLE = os.path.join(DOSSIER_DONNEES, "secret.key")
 
     def __init__(self):
         self.cle = self._obtenir_ou_creer_cle()
@@ -303,7 +327,7 @@ class InterfaceActivation(ctk.CTkFrame):
         # CORRECTION FAILLE : On affiche l'ID matériel (hw_id) et NON la clé attendue !
         self.lbl_hwid_valeur = ctk.CTkLabel(
             self.frame_hwid, 
-            text=self.hw_id, 
+            text=self.cle_attendue.replace("-CRYPT-$#A9-{[32", ""),
             font=("Consolas", 12, "bold"), 
             text_color="#3498DB"
         )
@@ -339,7 +363,7 @@ class InterfaceActivation(ctk.CTkFrame):
     def _copier_hwid(self):
         """Copie la clé matérielle HW-ID dans le presse-papiers."""
         self.clipboard_clear()
-        self.clipboard_append(self.hw_id)
+        self.clipboard_append(self.cle_attendue.replace("-CRYPT-$#A9-{[32", ""))
         self.lbl_msg.configure(text="✅ ID Matériel copié dans le presse-papiers !", text_color="#3498DB")
 
     def _verifier_code(self):
