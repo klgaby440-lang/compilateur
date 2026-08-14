@@ -28,7 +28,7 @@ jobs:
 
     - name: 🔨 Compiler avec Nuitka (Mode Standalone)
       run: |
-        python -m nuitka --standalone --windows-console-mode=attach --enable-plugin=tk-inter --company-name="CRYPT Enterprise" --product-name="SokoMaster" --file-version=1.0.0.0 --product-version=1.0.0.0 --assume-yes-for-downloads --output-dir="dist" main.py
+        python -m nuitka --standalone --windows-console-mode=attach --enable-plugin=tk-inter --company-name="CRYPT Enterprise" --windows-icon-from-ico=icon.ico --include-data-files=logo.png=logo.png --product-name="SokoMaster" --file-version=1.0.0.0 --product-version=1.0.0.0 --assume-yes-for-downloads --output-dir="dist" main.py
 
     - name: 🛠️ Installer Inno Setup
       run: |
