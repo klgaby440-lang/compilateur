@@ -24,11 +24,24 @@ jobs:
     - name: 📦 Installer les dépendances Python
       run: |
         python -m pip install --upgrade pip
-        pip install customtkinter cryptography httpx nuitka fpdf
+        pip install customtkinter cryptography httpx nuitka fpdf pillow
 
     - name: 🔨 Compiler avec Nuitka (Mode Standalone)
       run: |
-        python -m nuitka --standalone --windows-console-mode=attach --enable-plugin=tk-inter --company-name="CRYPT Enterprise" --windows-icon-from-ico=icon.ico --product-name="SokoMaster" --file-version=1.0.0.0 --product-version=1.0.0.0 --assume-yes-for-downloads --output-dir="dist" main.py
+        python -m nuitka --standalone `
+          --windows-console-mode=attach `
+          --enable-plugin=tk-inter `
+          --include-package-data=customtkinter `
+          --include-data-files=logo_soko_master.png=logo_soko_master.png `
+          --include-data-files=icon_soko_master.ico=icon_soko_master.ico `
+          --company-name="CRYPT Enterprise" `
+          --windows-icon-from-ico=icon_soko_master.ico `
+          --product-name="SokoMaster" `
+          --file-version=1.0.0.0 `
+          --product-version=1.0.0.0 `
+          --assume-yes-for-downloads `
+          --output-dir="dist" main.py
+      shell: powershell
 
     - name: 🛠️ Installer Inno Setup
       run: |
