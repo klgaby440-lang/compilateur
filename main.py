@@ -35,8 +35,8 @@ def obtenir_chemin_ressource(nom_fichier: str) -> str:
     return os.path.join(chemin_base, nom_fichier)
 
 # Utilisation des chemins sécurisés
-chemin_icone = obtenir_chemin_ressource("icon_soko_master.ico")
-chemin_logo = obtenir_chemin_ressource("logo_soko_master.png")
+chemin_icone = obtenir_chemin_ressource("icon.ico")
+chemin_logo = obtenir_chemin_ressource("logo.png")
 root = ctk.CTk()
 root.title("SokoMaster - CRYPT Enterprise")
 root.geometry("1000x650")
