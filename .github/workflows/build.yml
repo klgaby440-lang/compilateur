@@ -32,7 +32,7 @@ jobs:
           --windows-console-mode=attach `
           --enable-plugin=tk-inter `
           --include-package-data=customtkinter `
-          --include-data-files=logo_soko_master.png=logo.png `
+          --include-data-files=logo.png=logo.png `
           --include-data-files=icon_soko_master.ico=icon.ico `
           --company-name="CRYPT Enterprise" `
           --windows-icon-from-ico=icon.ico `
